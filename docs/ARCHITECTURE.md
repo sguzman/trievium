@@ -10,9 +10,10 @@ Trievium is a single-process, on-demand selection UI: **keybind -> prefix-tree l
 - `trie.rs`: deterministic, prefix-free shortcut generation and lookup; no UI dependencies.
 - `shortcut_cache.rs`: per-configuration persistent mnemonic assignments, storing labels and keys only.
 - `clipboard.rs`: uses `wl-copy` via direct process arguments and piped input (no shell or quoting).
+- `input.rs`: pure shortcut-input state machine and key-event classifier, with tests for modifier suppression, repeats and invalid prefixes.
 - `main.rs`: small CLI and focused egui picker.
 
-Config is read once at launch, without a watcher, daemon, or network calls. For now, changes take effect on the next invocation.
+Config is read once at launch, without a watcher, daemon, or network calls. The keyboard consumes egui key-down events rather than text events, so OS key-repeat and Ctrl/Alt/Super combinations cannot select items unintentionally. Failed clipboard operations reset the prefix for a safe retry. For now, changes take effect on the next invocation.
 
 ## Key assignment and invariants
 

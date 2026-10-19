@@ -3,8 +3,9 @@ use eframe::egui;
 use std::path::PathBuf;
 use trievium::clipboard::copy_text;
 use trievium::config::{self, Config};
+use trievium::input::{InputAction, Selection, classify_key};
 use trievium::shortcut_cache;
-use trievium::trie::{Keymap, Lookup};
+use trievium::trie::Keymap;
 
 fn main() {
     if let Err(error) = run() {
@@ -63,7 +64,7 @@ fn run() -> Result<()> {
             let picker = Picker {
                 config,
                 map,
-                prefix: String::new(),
+                selection: Selection::default(),
                 error: None,
             };
             let native = eframe::NativeOptions {
@@ -90,7 +91,7 @@ fn run() -> Result<()> {
 struct Picker {
     config: Config,
     map: Keymap,
-    prefix: String,
+    selection: Selection,
     error: Option<String>,
 }
 
@@ -98,27 +99,29 @@ impl Picker {
     fn select(&mut self, index: usize, ctx: &egui::Context) {
         match copy_text(&self.config.entries[index].text) {
             Ok(()) => ctx.send_viewport_cmd(egui::ViewportCommand::Close),
-            Err(error) => self.error = Some(error.to_string()),
+            Err(error) => {
+                self.selection.clear();
+                self.error = Some(format!("Clipboard failed: {error}. Retry a shortcut or click an entry."));
+            }
         }
     }
 
     fn type_char(&mut self, ch: char, ctx: &egui::Context) -> bool {
-        if !ch.is_ascii_alphabetic() {
-            return false;
-        }
-        self.error = None;
-        self.prefix.push(ch.to_ascii_uppercase());
-        match self.map.lookup(&self.prefix) {
-            Lookup::Selected(index) => {
+        let attempted = format!("{}{}", self.selection.prefix(), ch);
+        match self.selection.push(ch, &self.map) {
+            trievium::input::SelectionOutcome::Selected(index) => {
+                self.error = None;
                 self.select(index, ctx);
                 true
             }
-            Lookup::Continue => false,
-            Lookup::Invalid => {
-                self.error = Some(format!(
-                    "No selection matches '{}'. Backspace to correct.",
-                    self.prefix
-                ));
+            trievium::input::SelectionOutcome::Continue => {
+                self.error = None;
+                false
+            }
+            trievium::input::SelectionOutcome::Invalid => {
+                // Don't append impossible letters; users can immediately try
+                // another key without having to undo an invalid keystroke.
+                self.error = Some(format!("No selection matches '{attempted}'. Try another key."));
                 false
             }
         }
@@ -129,32 +132,22 @@ impl eframe::App for Picker {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         let events = ui.input(|input| input.events.clone());
-        for event in events {
-            match event {
-                egui::Event::Key {
-                    key: egui::Key::Escape,
-                    pressed: true,
-                    ..
-                } => {
+        for event in &events {
+            match classify_key(event) {
+                InputAction::Close => {
                     ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                     return;
                 }
-                egui::Event::Key {
-                    key: egui::Key::Backspace,
-                    pressed: true,
-                    ..
-                } => {
-                    self.prefix.pop();
+                InputAction::Backspace => {
+                    self.selection.backspace();
                     self.error = None;
                 }
-                egui::Event::Text(text) => {
-                    for ch in text.chars() {
-                        if self.type_char(ch, &ctx) {
-                            return;
-                        }
+                InputAction::Letter(ch) => {
+                    if self.type_char(ch, &ctx) {
+                        return;
                     }
                 }
-                _ => {}
+                InputAction::Ignore => {}
             }
         }
 
@@ -165,10 +158,10 @@ impl eframe::App for Picker {
             ui.label(egui::RichText::new("type to select · Esc closes").weak());
         });
         ui.add_space(5.0);
-        let prompt = if self.prefix.is_empty() {
+        let prompt = if self.selection.prefix().is_empty() {
             "Press a highlighted key".to_owned()
         } else {
-            format!("Sequence: {}", self.prefix)
+            format!("Sequence: {}", self.selection.prefix())
         };
         ui.label(egui::RichText::new(prompt).size(17.0).strong());
         if let Some(error) = &self.error {
@@ -182,9 +175,9 @@ impl eframe::App for Picker {
         }
         ui.separator();
 
-        let mut visible: Vec<usize> = self.map.matching(&self.prefix).collect();
+        let mut visible: Vec<usize> = self.map.matching(self.selection.prefix()).collect();
         visible.sort_by(|&a, &b| self.map.key(a).cmp(self.map.key(b)));
-        if self.prefix.is_empty() {
+        if self.selection.prefix().is_empty() {
             ui.label(
                 egui::RichText::new(format!("{} entries", visible.len()))
                     .small()
@@ -193,7 +186,7 @@ impl eframe::App for Picker {
         } else {
             let mut next: Vec<char> = visible
                 .iter()
-                .filter_map(|&index| self.map.key(index).chars().nth(self.prefix.len()))
+                .filter_map(|&index| self.map.key(index).chars().nth(self.selection.prefix().len()))
                 .collect();
             next.sort_unstable();
             next.dedup();

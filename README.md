@@ -33,9 +33,10 @@ Replace the absolute path with your actual location. Choose a keybind that does 
 - `G` could immediately copy your Greeting and close.
 - `T` could reveal several choices, with `TA` and `TB` as terminal sequences.
 - `Esc` closes without copying; `Backspace` corrects a partial sequence.
+- Selection uses fresh letter key-down events, ignoring OS key-repeat and Ctrl/Alt/Super combinations. Shift is allowed; invalid letters leave the current prefix unchanged so you can correct the next keystroke immediately.
 - Clicking a row or its key badge also copies and exits.
 - The popup sizes itself to the entry count (up to a maximum), shows remaining key choices, and virtualizes long lists for responsive scrolling.
-- A failed clipboard operation displays an error and **does not exit**.
+- A failed clipboard operation displays an error, clears the terminal sequence for retry, and **does not exit**.
 - `wl-copy` runs without `--foreground`, leaving clipboard ownership alive after the UI exits. Paste normally into the previous application.
 
 The JSON file has `version: 1` and an `entries` array. Each entry has `label` and `text`; optional `key` pins a fixed sequence; optional integer `priority` makes automatic assignment earlier for more important entries. Keys use 1-4 ASCII letters. An assigned key cannot prefix any other key. Invalid configurations (including pinned-key collisions) are rejected before launching. There is no automatic paste, command execution, network access, or telemetry.

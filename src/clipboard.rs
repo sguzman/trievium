@@ -18,7 +18,9 @@ fn copy_with(program: &str, args: &[&str], text: &str) -> Result<()> {
         .stderr(Stdio::piped())
         .spawn()
         .with_context(|| {
-            format!("Could not start {program}. Install wl-clipboard and run under a Wayland session")
+            format!(
+                "Could not start {program}. Install wl-clipboard and run under a Wayland session"
+            )
         })?;
 
     if let Some(mut stdin) = child.stdin.take() {

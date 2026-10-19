@@ -45,6 +45,7 @@ CI also produces a packaged Linux x86_64 binary from each successful run. Open t
 - A session-local advisory lock prevents repeated hotkey presses opening multiple windows; no existing process is terminated. If `XDG_RUNTIME_DIR` is absent, locking is skipped.
 - A failed clipboard operation displays an error, clears the terminal sequence for retry, and **does not exit**.
 - `wl-copy` runs without `--foreground`, leaving clipboard ownership alive after the UI exits. Paste normally into the previous application.
+- Headless CI verifies Unicode and multiline bytes through the same subprocess boundary using a local file writer; it does not simulate a real Wayland clipboard.
 
 The JSON file has `version: 1` and an `entries` array. Each entry has `label` and `text`; optional `key` pins a fixed sequence; optional integer `priority` makes automatic assignment earlier for more important entries. Keys use 1-4 ASCII letters. An assigned key cannot prefix any other key. Invalid configurations (including pinned-key collisions) are rejected before launching. There is no automatic paste, command execution, network access, or telemetry.
 

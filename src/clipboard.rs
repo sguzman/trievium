@@ -5,8 +5,14 @@ use std::io::Write;
 use std::process::{Command, Stdio};
 
 pub fn copy_text(text: &str) -> Result<()> {
-    let mut child = Command::new("wl-copy")
-        .args(["--type", "text/plain;charset=utf-8"])
+    copy_with("wl-copy", &["--type", "text/plain;charset=utf-8"], text)
+}
+
+/// The real command uses wl-copy. An injectable subprocess boundary allows
+/// lossless UTF-8 verification in headless CI without touching any clipboard.
+fn copy_with(program: &str, args: &[&str], text: &str) -> Result<()> {
+    let mut child = Command::new(program)
+        .args(args)
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
@@ -26,4 +32,34 @@ pub fn copy_text(text: &str) -> Result<()> {
         );
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn preserves_multiline_unicode_payload() {
+        let path = std::env::temp_dir().join(format!(
+            "trievium-clipboard-roundtrip-{}",
+            std::process::id()
+        ));
+        let destination = path.to_str().expect("temporary directory is UTF-8");
+        let original = "Español: á é í ó ú — 汉字 🚀\\nSecond line\\n\\n";
+        // tee copies standard input byte for byte, making the clipboard
+        // boundary testable without a running Wayland compositor.
+        copy_with("tee", &[destination], original).unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), original.as_bytes());
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn failed_clipboard_subprocess_is_reported() {
+        assert!(copy_with("false", &[], "message").is_err());
+    }
+
+    #[test]
+    fn missing_clipboard_subprocess_is_reported() {
+        assert!(copy_with("trievium-nonexistent-clipboard-program", &[], "message").is_err());
+    }
 }

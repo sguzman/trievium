@@ -61,12 +61,20 @@ fn run() -> Result<()> {
             }
             let window_height =
                 (125.0 + config.entries.len().min(9) as f32 * 39.0).clamp(245.0, 490.0);
-            let picker = Picker {
+            // The key order and matching list change only on prefix edits,
+            // never on redraw. Keep the hot UI path proportional to visible rows.
+            let mut ordered: Vec<usize> = (0..config.entries.len()).collect();
+            ordered.sort_by(|&a, &b| map.key(a).cmp(map.key(b)));
+            let mut picker = Picker {
                 config,
                 map,
                 selection: Selection::default(),
                 error: None,
+                ordered,
+                visible: Vec::new(),
+                next_keys: String::new(),
             };
+            picker.refresh_choices();
             let native = eframe::NativeOptions {
                 renderer: eframe::Renderer::Glow,
                 viewport: egui::ViewportBuilder::default()
@@ -93,14 +101,36 @@ struct Picker {
     map: Keymap,
     selection: Selection,
     error: Option<String>,
+    ordered: Vec<usize>,
+    visible: Vec<usize>,
+    next_keys: String,
 }
 
 impl Picker {
+    fn refresh_choices(&mut self) {
+        let prefix = self.selection.prefix();
+        self.visible = self
+            .ordered
+            .iter()
+            .copied()
+            .filter(|&index| self.map.key(index).starts_with(prefix))
+            .collect();
+        let mut next: Vec<char> = self
+            .visible
+            .iter()
+            .filter_map(|&index| self.map.key(index).chars().nth(prefix.len()))
+            .collect();
+        next.sort_unstable();
+        next.dedup();
+        self.next_keys = next.into_iter().collect();
+    }
+
     fn select(&mut self, index: usize, ctx: &egui::Context) {
         match copy_text(&self.config.entries[index].text) {
             Ok(()) => ctx.send_viewport_cmd(egui::ViewportCommand::Close),
             Err(error) => {
                 self.selection.clear();
+                self.refresh_choices();
                 self.error = Some(format!(
                     "Clipboard failed: {error}. Retry a shortcut or click an entry."
                 ));
@@ -117,6 +147,7 @@ impl Picker {
                 true
             }
             trievium::input::SelectionOutcome::Continue => {
+                self.refresh_choices();
                 self.error = None;
                 false
             }
@@ -144,6 +175,7 @@ impl eframe::App for Picker {
                 }
                 InputAction::Backspace => {
                     self.selection.backspace();
+                    self.refresh_choices();
                     self.error = None;
                 }
                 InputAction::Letter(ch) => {
@@ -179,47 +211,32 @@ impl eframe::App for Picker {
         }
         ui.separator();
 
-        let mut visible: Vec<usize> = self.map.matching(self.selection.prefix()).collect();
-        visible.sort_by(|&a, &b| self.map.key(a).cmp(self.map.key(b)));
         if self.selection.prefix().is_empty() {
             ui.label(
-                egui::RichText::new(format!("{} entries", visible.len()))
+                egui::RichText::new(format!("{} entries", self.visible.len()))
                     .small()
                     .weak(),
             );
-        } else {
-            let mut next: Vec<char> = visible
-                .iter()
-                .filter_map(|&index| {
-                    self.map
-                        .key(index)
-                        .chars()
-                        .nth(self.selection.prefix().len())
-                })
-                .collect();
-            next.sort_unstable();
-            next.dedup();
-            if !next.is_empty() {
-                ui.label(
-                    egui::RichText::new(format!(
-                        "{} matches · next keys: {}",
-                        visible.len(),
-                        next.into_iter().collect::<String>()
-                    ))
-                    .small()
-                    .weak(),
-                );
-            }
+        } else if !self.next_keys.is_empty() {
+            ui.label(
+                egui::RichText::new(format!(
+                    "{} matches · next keys: {}",
+                    self.visible.len(),
+                    self.next_keys
+                ))
+                .small()
+                .weak(),
+            );
         }
 
-        // Virtualize instead of allocating/rendering every row every frame.
-        // Large libraries should not stall the picker when it opens.
+        // Virtualize row painting, and rebuild the match list only when the
+        // typed prefix changes rather than re-sorting on every redraw.
         let mut clicked = None;
         egui::ScrollArea::vertical()
             .auto_shrink([false, false])
-            .show_rows(ui, 39.0, visible.len(), |ui, rows| {
+            .show_rows(ui, 39.0, self.visible.len(), |ui, rows| {
                 for row in rows {
-                    let index = visible[row];
+                    let index = self.visible[row];
                     let entry = &self.config.entries[index];
                     ui.horizontal(|ui| {
                         let sequence = self.map.key(index);

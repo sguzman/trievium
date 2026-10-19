@@ -27,7 +27,8 @@ fn acquire_at(path: &Path) -> Result<Instance> {
         use std::os::unix::fs::OpenOptionsExt;
         options.mode(0o600);
     }
-    let file = options.open(path)
+    let file = options
+        .open(path)
         .with_context(|| format!("Opening picker session lock at {}", path.display()))?;
     match file.try_lock() {
         Ok(()) => Ok(Instance::Acquired(file)),
@@ -42,10 +43,7 @@ mod tests {
 
     #[test]
     fn only_one_process_can_hold_session_lock() {
-        let path = std::env::temp_dir().join(format!(
-            "trievium-lock-test-{}",
-            std::process::id()
-        ));
+        let path = std::env::temp_dir().join(format!("trievium-lock-test-{}", std::process::id()));
         let first = acquire_at(&path).unwrap();
         assert!(matches!(first, Instance::Acquired(_)));
         assert!(matches!(acquire_at(&path).unwrap(), Instance::Busy));

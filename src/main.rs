@@ -149,7 +149,9 @@ fn doctor(path: &Path) -> Result<()> {
     }
 
     if healthy {
-        println!("Preflight passed. Window focus and clipboard persistence still require local testing.");
+        println!(
+            "Preflight passed. Window focus and clipboard persistence still require local testing."
+        );
         Ok(())
     } else {
         bail!("Preflight failed. Correct the items marked [!!] above.")

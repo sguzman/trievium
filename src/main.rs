@@ -1,9 +1,11 @@
 use anyhow::{Context, Result, bail};
 use eframe::egui;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 use trievium::clipboard::copy_text;
 use trievium::config::{self, Config};
 use trievium::input::{InputAction, Selection, classify_key};
+use trievium::launch::{self, Instance};
 use trievium::shortcut_cache;
 use trievium::trie::Keymap;
 
@@ -20,15 +22,19 @@ fn run() -> Result<()> {
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
-            "pick" | "init" | "validate" | "config-path" => command = arg,
+            "pick" | "init" | "validate" | "config-path" | "doctor" => command = arg,
             "--config" => {
                 override_path = Some(PathBuf::from(
                     args.next().context("--config requires a path")?,
                 ));
             }
+            "--version" | "-V" => {
+                println!("trievium {}", env!("CARGO_PKG_VERSION"));
+                return Ok(());
+            }
             "--help" | "-h" => {
                 println!(
-                    "Trievium - keyboard-first text selection\n\nUsage: trievium [pick|init|validate|config-path] [--config PATH]\n\nDefault: pick. Keys are automatically assigned unless pinned in the JSON config."
+                    "Trievium - keyboard-first text selection\n\nUsage: trievium [pick|init|validate|config-path|doctor] [--config PATH]\n\nDefault: pick. Keys are automatically assigned unless pinned in the JSON config."
                 );
                 return Ok(());
             }
@@ -42,6 +48,7 @@ fn run() -> Result<()> {
             println!("Created {}. Edit it, then run trievium.", path.display());
         }
         "config-path" => println!("{}", path.display()),
+        "doctor" => return doctor(&path),
         "validate" => {
             let config = Config::load(&path)?;
             let cache_path = shortcut_cache::path_for_config(&path)?;
@@ -52,6 +59,13 @@ fn run() -> Result<()> {
             }
         }
         _ => {
+            // Acquired lock must stay in scope until the native window closes.
+            // A second hotkey invocation quietly avoids creating a second
+            // picker, without killing or disturbing the existing process.
+            let _instance_guard = match launch::acquire()? {
+                Some(Instance::Busy) => return Ok(()),
+                guard => guard,
+            };
             let config = Config::load(&path)?;
             let cache_path = shortcut_cache::path_for_config(&path)?;
             let previous = shortcut_cache::load(&cache_path);
@@ -94,6 +108,52 @@ fn run() -> Result<()> {
         }
     }
     Ok(())
+}
+
+/// Non-destructive preflight: no clipboard writes, no config creation.
+fn doctor(path: &Path) -> Result<()> {
+    let mut healthy = true;
+    println!("Trievium environment check");
+    if std::env::var_os("WAYLAND_DISPLAY").is_some_and(|value| !value.is_empty()) {
+        println!("[ok] WAYLAND_DISPLAY is set");
+    } else {
+        println!("[!!] No WAYLAND_DISPLAY in environment");
+        healthy = false;
+    }
+
+    match Command::new("wl-copy").arg("--version").output() {
+        Ok(result) if result.status.success() => println!("[ok] wl-copy is available"),
+        _ => {
+            println!("[!!] wl-copy missing or not runnable; install wl-clipboard");
+            healthy = false;
+        }
+    }
+
+    match Config::load(path).and_then(|config| {
+        let previous_path = shortcut_cache::path_for_config(path)?;
+        let previous = shortcut_cache::load(&previous_path);
+        let map = Keymap::build_with_previous(&config.entries, &previous)?;
+        Ok((config.entries.len(), map))
+    }) {
+        Ok((total, _)) => println!("[ok] Config and shortcut map valid ({total} entries)"),
+        Err(error) => {
+            println!("[!!] Config error: {error:#}");
+            healthy = false;
+        }
+    }
+
+    if std::env::var_os("XDG_RUNTIME_DIR").is_some_and(|value| !value.is_empty()) {
+        println!("[ok] XDG_RUNTIME_DIR is set (single-instance guard available)");
+    } else {
+        println!("[note] XDG_RUNTIME_DIR absent; picker runs without single-instance guard");
+    }
+
+    if healthy {
+        println!("Preflight passed. Window focus and clipboard persistence still require local testing.");
+        Ok(())
+    } else {
+        bail!("Preflight failed. Correct the items marked [!!] above.")
+    }
 }
 
 struct Picker {

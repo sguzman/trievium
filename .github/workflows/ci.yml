@@ -23,3 +23,26 @@ jobs:
         run: cargo test --locked
       - name: Clippy
         run: cargo clippy --locked --all-targets -- -D warnings
+      - name: CLI smoke test
+        run: |
+          cargo build --locked
+          config="$RUNNER_TEMP/trievium-ci-items.json"
+          ./target/debug/trievium --version
+          ./target/debug/trievium init --config "$config"
+          ./target/debug/trievium validate --config "$config"
+          if ./target/debug/trievium init --config "$config"; then
+            echo "init unexpectedly overwrote existing config" >&2
+            exit 1
+          fi
+      - name: Release binary
+        run: cargo build --release --locked
+      - name: Package Linux x86_64
+        run: |
+          mkdir -p dist/trievium
+          cp target/release/trievium LICENSE dist/trievium/
+          tar -C dist -czf dist/trievium-linux-x86_64.tar.gz trievium
+      - uses: actions/upload-artifact@v4
+        with:
+          name: trievium-linux-x86_64
+          path: dist/trievium-linux-x86_64.tar.gz
+          if-no-files-found: error

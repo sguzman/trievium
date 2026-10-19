@@ -11,7 +11,8 @@ Trievium is a single-process, on-demand selection UI: **keybind -> prefix-tree l
 - `shortcut_cache.rs`: per-configuration persistent mnemonic assignments, storing labels and keys only.
 - `clipboard.rs`: uses `wl-copy` via direct process arguments and piped input (no shell or quoting).
 - `input.rs`: pure shortcut-input state machine and key-event classifier, with tests for modifier suppression, repeats and invalid prefixes.
-- `main.rs`: small CLI and focused egui picker.
+- `launch.rs`: session-local advisory lock, preventing duplicate modal instances with no signals or process kills.
+- `main.rs`: small CLI (including read-only `doctor`) and focused egui picker.
 
 Config is read once at launch, without a watcher, daemon, or network calls. The keyboard consumes egui key-down events rather than text events, so OS key-repeat and Ctrl/Alt/Super combinations cannot select items unintentionally. Failed clipboard operations reset the prefix for a safe retry. The visible-match list and next-letter hints are recomputed on prefix changes, not on every UI redraw. For now, changes take effect on the next invocation.
 
@@ -26,6 +27,12 @@ Config is read once at launch, without a watcher, daemon, or network calls. The 
 This is not an optimal coding algorithm; it favors predictable mnemonic choices and short high-priority keys. It retains previously auto-assigned keys on a best-effort basis across config edits. If a former assignment blocks newly required capacity, the lower-priority cached assignment is released; explicit `key` values always protect important bindings. Labels act as cache identities and must be unique. The cache contains no snippet text and is stored separately for each canonical configuration-file path; cache writes are atomic and optional. Read-only `validate` never writes cache state.
 
 The number of supported entries is capped at 10000 for UI practicality; the theoretical 4-character alphabet has 26^4 leaves. This is not a keyboard-layout localization system yet; typed input is intentionally ASCII.
+
+## Linux launch and preflight
+
+The picker attempts to obtain a session-local lock in `XDG_RUNTIME_DIR/trievium.lock`. The file descriptor stays alive throughout the picker window lifetime, and the kernel releases its lock on exit. A second invocation simply exits instead of opening overlapping windows. No signals or process kills. If the runtime directory variable is not provided, the guard is omitted instead of preventing launch.
+
+`trievium doctor` checks Wayland presence, `wl-copy --version`, and the validity of configuration plus generated shortcuts without copying any content or creating configuration files. The read-only check is deliberately not considered a full integration test.
 
 ## Clipboard reliability
 

@@ -28,6 +28,12 @@ bind = SUPER, P, exec, /absolute/path/to/trievium/target/release/trievium
 
 Replace the absolute path with your actual location. Choose a keybind that does not conflict with your existing binds. The picker must receive keyboard focus; if your Hyprland rules prevent focus or tile small windows, configure a float/focus rule for the `trievium` app class in your existing local Hyprland config (do not blindly replace unrelated rules).
 
+## Preflight and compiled Linux builds
+
+After creating your configuration, `trievium doctor` performs a **read-only** check for Wayland session variables, the `wl-copy` program, and valid shortcuts. It does not touch the clipboard or launch a window. A passing result does not guarantee compositor focus or paste behavior; those still require real Hyprland QA.
+
+CI also produces a packaged Linux x86_64 binary from each successful run. Open the latest [GitHub Actions run](https://github.com/sguzman/trievium/actions/workflows/ci.yml), and retrieve the `trievium-linux-x86_64` build artifact. The archive contains the executable and license; extract it anywhere in your home directory and execute it. `wl-clipboard` must still be installed. This is an alternative to compiling with Cargo, not a system-wide installer.
+
 ## Behavior
 
 - `G` could immediately copy your Greeting and close.
@@ -36,6 +42,7 @@ Replace the absolute path with your actual location. Choose a keybind that does 
 - Selection uses fresh letter key-down events, ignoring OS key-repeat and Ctrl/Alt/Super combinations. Shift is allowed; invalid letters leave the current prefix unchanged so you can correct the next keystroke immediately.
 - Clicking a row or its key badge also copies and exits.
 - The popup sizes itself to the entry count (up to a maximum), shows remaining key choices, and virtualizes long lists for responsive scrolling.
+- A session-local advisory lock prevents repeated hotkey presses opening multiple windows; no existing process is terminated. If `XDG_RUNTIME_DIR` is absent, locking is skipped.
 - A failed clipboard operation displays an error, clears the terminal sequence for retry, and **does not exit**.
 - `wl-copy` runs without `--foreground`, leaving clipboard ownership alive after the UI exits. Paste normally into the previous application.
 

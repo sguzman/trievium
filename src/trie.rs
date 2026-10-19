@@ -131,16 +131,24 @@ impl Keymap {
         // keys or would exhaust all available space for the remaining entries.
         // If every letter has already been used, the least-prioritized
         // remembered shortcut yields to longer sequences.
+        let mut unresolved = 0_usize;
         for (position, &index) in auto.iter().enumerate() {
             let Some(code) = previous.get(&entries[index].label) else {
+                unresolved += 1;
                 continue;
             };
             if !valid_key(code) || code.len() > depth || root.conflicts(code) {
+                unresolved += 1;
                 continue;
             }
             let cost = capacity(depth - code.len());
-            let remaining = auto.len() - position - 1;
+            // Include unassigned, higher-priority entries visited earlier as
+            // well as everything still to come. Otherwise a full remembered
+            // alphabet could consume the last free branch before a new entry
+            // can receive a shortcut.
+            let remaining = unresolved + (auto.len() - position - 1);
             if cost > free || free - cost < remaining {
+                unresolved += 1;
                 continue;
             }
             root.insert(code, index)?;

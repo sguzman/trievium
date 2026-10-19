@@ -175,6 +175,8 @@ mod tests {
         assert_eq!(picker.prefix(), "B");
         assert_eq!(picker.push('c', &map), SelectionOutcome::Selected(1));
         picker.backspace();
+        assert_eq!(picker.prefix(), "B");
+        picker.backspace();
         assert_eq!(picker.prefix(), "");
     }
 

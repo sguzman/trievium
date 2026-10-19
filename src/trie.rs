@@ -10,6 +10,9 @@ const MAX_DEPTH: usize = 4;
 #[derive(Default, Debug)]
 struct Node {
     terminal: Option<usize>,
+    // Occupied capacity at the maximum shortcut depth. This lets the
+    // candidate search skip entire saturated subtrees in constant time.
+    used_slots: usize,
     children: BTreeMap<char, Node>,
 }
 
@@ -32,9 +35,12 @@ impl Node {
         if self.conflicts(code) {
             bail!("Key '{code}' duplicates or prefixes another key");
         }
+        let cost = capacity(MAX_DEPTH - code.len());
+        self.used_slots += cost;
         let mut node = self;
         for c in code.chars() {
             node = node.children.entry(c).or_default();
+            node.used_slots += cost;
         }
         node.terminal = Some(index);
         Ok(())
@@ -255,13 +261,12 @@ fn find_candidate(
     candidate: &mut String,
     chosen: &mut Option<String>,
 ) -> bool {
-    // A terminal at an intermediate prefix excludes its entire subtree.
-    // Prune it before traversing thousands of impossible longer sequences.
+    // Skip not only terminal prefixes but whole subtrees already saturated
+    // by shorter keys or a complete set of longer terminal keys.
     if !candidate.is_empty()
-        && search
-            .root
-            .get(candidate)
-            .is_some_and(|node| node.terminal.is_some())
+        && search.root.get(candidate).is_some_and(|node| {
+            node.used_slots == capacity(MAX_DEPTH - candidate.len())
+        })
     {
         return false;
     }
@@ -417,6 +422,30 @@ mod tests {
         let previous = BTreeMap::from([("Email".into(), "E!BAD".into())]);
         let map = Keymap::build_with_previous(&entries, &previous).unwrap();
         assert_eq!(map.key(0), "E");
+    }
+
+    #[test]
+    fn occupancy_prunes_full_subtrees_without_losing_available_keys() {
+        let mut root = Node::default();
+        for c in 'A'..='Z' {
+            root.insert(&format!("A{c}"), (c as u32 - 'A' as u32) as usize)
+                .unwrap();
+        }
+        assert_eq!(root.get("A").unwrap().used_slots, capacity(MAX_DEPTH - 1));
+        assert_eq!(root.used_slots, capacity(MAX_DEPTH - 1));
+        assert!(!root.conflicts("B"));
+        assert!(root.conflicts("AX"));
+    }
+
+    #[test]
+    fn scales_to_large_libraries() {
+        let items: Vec<_> = (0..1000)
+            .map(|i| entry(&format!("Entry {i:04}"), None, 0))
+            .collect();
+        let map = Keymap::build(&items).unwrap();
+        for (index, key) in (0..items.len()).map(|i| (i, map.key(i))) {
+            assert_eq!(map.lookup(key), Lookup::Selected(index));
+        }
     }
 
     #[test]

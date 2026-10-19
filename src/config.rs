@@ -71,10 +71,10 @@ pub fn config_path(override_path: Option<PathBuf>) -> Result<PathBuf> {
     if let Some(path) = std::env::var_os("TRIEVIUM_CONFIG") {
         return Ok(PathBuf::from(path));
     }
-    if let Some(base) = std::env::var_os("XDG_CONFIG_HOME") {
-        if !base.is_empty() {
-            return Ok(PathBuf::from(base).join("trievium").join("items.json"));
-        }
+    if let Some(base) = std::env::var_os("XDG_CONFIG_HOME")
+        && !base.is_empty()
+    {
+        return Ok(PathBuf::from(base).join("trievium").join("items.json"));
     }
     let home = std::env::var_os("HOME").context("HOME or XDG_CONFIG_HOME is required")?;
     Ok(PathBuf::from(home).join(".config/trievium/items.json"))

@@ -111,16 +111,15 @@ impl Keymap {
             let mut chosen = None;
             for len in 1..=depth {
                 let mut candidate = String::with_capacity(len);
-                if find_candidate(
-                    &root,
-                    &order,
-                    len,
-                    &mut candidate,
+                let search = CandidateSearch {
+                    root: &root,
+                    order: &order,
+                    length: len,
                     free,
                     remaining_after,
-                    depth,
-                    &mut chosen,
-                ) {
+                    max_depth: depth,
+                };
+                if find_candidate(&search, &mut candidate, &mut chosen) {
                     break;
                 }
             }
@@ -182,36 +181,34 @@ fn alphabet_order(label: &str) -> Vec<char> {
     result
 }
 
-fn find_candidate(
-    root: &Node,
-    order: &[char],
+struct CandidateSearch<'a> {
+    root: &'a Node,
+    order: &'a [char],
     length: usize,
-    candidate: &mut String,
     free: usize,
     remaining_after: usize,
     max_depth: usize,
+}
+
+fn find_candidate(
+    search: &CandidateSearch<'_>,
+    candidate: &mut String,
     chosen: &mut Option<String>,
 ) -> bool {
-    if candidate.len() == length {
-        let cost = capacity(max_depth - length);
-        if cost <= free && free - cost >= remaining_after && !root.conflicts(candidate) {
+    if candidate.len() == search.length {
+        let cost = capacity(search.max_depth - search.length);
+        if cost <= search.free
+            && search.free - cost >= search.remaining_after
+            && !search.root.conflicts(candidate)
+        {
             *chosen = Some(candidate.clone());
             return true;
         }
         return false;
     }
-    for &c in order {
+    for &c in search.order {
         candidate.push(c);
-        if find_candidate(
-            root,
-            order,
-            length,
-            candidate,
-            free,
-            remaining_after,
-            max_depth,
-            chosen,
-        ) {
+        if find_candidate(search, candidate, chosen) {
             return true;
         }
         candidate.pop();

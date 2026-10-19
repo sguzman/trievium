@@ -17,7 +17,9 @@ fn copy_with(program: &str, args: &[&str], text: &str) -> Result<()> {
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
         .spawn()
-        .context("Could not start wl-copy. Install wl-clipboard and run under a Wayland session")?;
+        .with_context(|| {
+            format!("Could not start {program}. Install wl-clipboard and run under a Wayland session")
+        })?;
 
     if let Some(mut stdin) = child.stdin.take() {
         stdin
@@ -45,7 +47,7 @@ mod tests {
             std::process::id()
         ));
         let destination = path.to_str().expect("temporary directory is UTF-8");
-        let original = "Español: á é í ó ú — 汉字 🚀\\nSecond line\\n\\n";
+        let original = "Español: á é í ó ú — 汉字 🚀\nSecond line\n\n";
         // tee copies standard input byte for byte, making the clipboard
         // boundary testable without a running Wayland compositor.
         copy_with("tee", &[destination], original).unwrap();

@@ -3,7 +3,7 @@
 //! Linux file locking is advisory and the kernel releases it when the
 //! last descriptor closes. No process enumeration or signal delivery is used.
 use anyhow::{Context, Result};
-use std::fs::{File, OpenOptions};
+use std::fs::{File, OpenOptions, TryLockError};
 use std::path::Path;
 
 #[derive(Debug)]
@@ -32,8 +32,10 @@ fn acquire_at(path: &Path) -> Result<Instance> {
         .with_context(|| format!("Opening picker session lock at {}", path.display()))?;
     match file.try_lock() {
         Ok(()) => Ok(Instance::Acquired(file)),
-        Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => Ok(Instance::Busy),
-        Err(error) => Err(error).with_context(|| format!("Locking {}", path.display())),
+        Err(TryLockError::WouldBlock) => Ok(Instance::Busy),
+        Err(TryLockError::Error(error)) => {
+            Err(error).with_context(|| format!("Locking {}", path.display()))
+        }
     }
 }
 

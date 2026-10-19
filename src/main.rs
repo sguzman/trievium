@@ -58,8 +58,8 @@ fn run() -> Result<()> {
             if let Err(error) = shortcut_cache::save(&cache_path, &config.entries, &map) {
                 eprintln!("trievium: cannot save automatic key assignments: {error:#}");
             }
-            let window_height = (125.0 + config.entries.len().min(9) as f32 * 39.0)
-                .clamp(245.0, 490.0);
+            let window_height =
+                (125.0 + config.entries.len().min(9) as f32 * 39.0).clamp(245.0, 490.0);
             let picker = Picker {
                 config,
                 map,

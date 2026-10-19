@@ -2,8 +2,8 @@
 //!
 //! Selection accepts logical A-Z key presses, not arbitrary text insertion.
 //! This deliberately ignores key-repeat and modified hotkeys. Shift is fine.
-use eframe::egui::{Event, Key};
 use crate::trie::{Keymap, Lookup};
+use eframe::egui::{Event, Key};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InputAction {
@@ -20,10 +20,11 @@ pub fn classify_key(event: &Event) -> InputAction {
         repeat: false,
         modifiers,
         ..
-    } = event else {
+    } = event
+    else {
         return InputAction::Ignore;
     };
-    if modifiers.command || modifiers.ctrl || modifiers.alt {
+    if modifiers.command || modifiers.ctrl || modifiers.alt || modifiers.mac_cmd {
         return InputAction::Ignore;
     }
     match key {
@@ -128,22 +129,40 @@ mod tests {
 
     #[test]
     fn unmodified_letter_triggers_and_repeat_does_not() {
-        assert_eq!(classify_key(&event(Key::A, Modifiers::NONE, false)), InputAction::Letter('A'));
-        assert_eq!(classify_key(&event(Key::A, Modifiers::NONE, true)), InputAction::Ignore);
+        assert_eq!(
+            classify_key(&event(Key::A, Modifiers::NONE, false)),
+            InputAction::Letter('A')
+        );
+        assert_eq!(
+            classify_key(&event(Key::A, Modifiers::NONE, true)),
+            InputAction::Ignore
+        );
     }
 
     #[test]
     fn modifier_hotkeys_cannot_select_items() {
         for modifiers in [Modifiers::CTRL, Modifiers::ALT, Modifiers::COMMAND] {
-            assert_eq!(classify_key(&event(Key::S, modifiers, false)), InputAction::Ignore);
+            assert_eq!(
+                classify_key(&event(Key::S, modifiers, false)),
+                InputAction::Ignore
+            );
         }
-        assert_eq!(classify_key(&event(Key::A, Modifiers::SHIFT, false)), InputAction::Letter('A'));
+        assert_eq!(
+            classify_key(&event(Key::A, Modifiers::SHIFT, false)),
+            InputAction::Letter('A')
+        );
     }
 
     #[test]
     fn special_keys_and_text_input() {
-        assert_eq!(classify_key(&event(Key::Escape, Modifiers::NONE, false)), InputAction::Close);
-        assert_eq!(classify_key(&event(Key::Backspace, Modifiers::NONE, false)), InputAction::Backspace);
+        assert_eq!(
+            classify_key(&event(Key::Escape, Modifiers::NONE, false)),
+            InputAction::Close
+        );
+        assert_eq!(
+            classify_key(&event(Key::Backspace, Modifiers::NONE, false)),
+            InputAction::Backspace
+        );
         assert_eq!(classify_key(&Event::Text("E".into())), InputAction::Ignore);
     }
 

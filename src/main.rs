@@ -101,7 +101,9 @@ impl Picker {
             Ok(()) => ctx.send_viewport_cmd(egui::ViewportCommand::Close),
             Err(error) => {
                 self.selection.clear();
-                self.error = Some(format!("Clipboard failed: {error}. Retry a shortcut or click an entry."));
+                self.error = Some(format!(
+                    "Clipboard failed: {error}. Retry a shortcut or click an entry."
+                ));
             }
         }
     }
@@ -121,7 +123,9 @@ impl Picker {
             trievium::input::SelectionOutcome::Invalid => {
                 // Don't append impossible letters; users can immediately try
                 // another key without having to undo an invalid keystroke.
-                self.error = Some(format!("No selection matches '{attempted}'. Try another key."));
+                self.error = Some(format!(
+                    "No selection matches '{attempted}'. Try another key."
+                ));
                 false
             }
         }
@@ -186,7 +190,12 @@ impl eframe::App for Picker {
         } else {
             let mut next: Vec<char> = visible
                 .iter()
-                .filter_map(|&index| self.map.key(index).chars().nth(self.selection.prefix().len()))
+                .filter_map(|&index| {
+                    self.map
+                        .key(index)
+                        .chars()
+                        .nth(self.selection.prefix().len())
+                })
                 .collect();
             next.sort_unstable();
             next.dedup();

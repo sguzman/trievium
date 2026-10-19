@@ -59,7 +59,10 @@ impl Config {
                 bail!("Entry {} has an empty label", index + 1);
             }
             if !labels.insert(&entry.label) {
-                bail!("Duplicate label '{}': labels identify persistent key assignments", entry.label);
+                bail!(
+                    "Duplicate label '{}': labels identify persistent key assignments",
+                    entry.label
+                );
             }
             if entry.text.is_empty() {
                 bail!("Entry '{}' has no text to copy", entry.label);
@@ -126,7 +129,8 @@ pub fn initialize(path: &Path) -> Result<()> {
         use std::os::unix::fs::OpenOptionsExt;
         options.mode(0o600);
     }
-    let mut file = options.open(path)
+    let mut file = options
+        .open(path)
         .with_context(|| format!("Creating {}", path.display()))?;
     use std::io::Write;
     file.write_all(serde_json::to_string_pretty(&example)?.as_bytes())?;
@@ -154,8 +158,16 @@ mod tests {
 
     #[test]
     fn rejects_duplicate_labels() {
-        let item = Entry { label: "Same".into(), text: "X".into(), key: None, priority: 0 };
-        let config = Config { version: 1, entries: vec![item.clone(), item] };
+        let item = Entry {
+            label: "Same".into(),
+            text: "X".into(),
+            key: None,
+            priority: 0,
+        };
+        let config = Config {
+            version: 1,
+            entries: vec![item.clone(), item],
+        };
         assert!(config.validate().is_err());
     }
 

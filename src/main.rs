@@ -3,8 +3,8 @@ use eframe::egui;
 use std::path::PathBuf;
 use trievium::clipboard::copy_text;
 use trievium::config::{self, Config};
-use trievium::trie::{Keymap, Lookup};
 use trievium::shortcut_cache;
+use trievium::trie::{Keymap, Lookup};
 
 fn main() {
     if let Err(error) = run() {

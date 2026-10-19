@@ -220,9 +220,7 @@ pub enum Lookup {
 }
 
 fn valid_key(key: &str) -> bool {
-    !key.is_empty()
-        && key.len() <= MAX_DEPTH
-        && key.bytes().all(|byte| byte.is_ascii_uppercase())
+    !key.is_empty() && key.len() <= MAX_DEPTH && key.bytes().all(|byte| byte.is_ascii_uppercase())
 }
 
 fn capacity(exponent: usize) -> usize {
@@ -365,10 +363,7 @@ mod tests {
 
     #[test]
     fn remembers_shortcuts_after_adding_entries() {
-        let initial = vec![
-            entry("Email", None, 9),
-            entry("Address", None, 4),
-        ];
+        let initial = vec![entry("Email", None, 9), entry("Address", None, 4)];
         let previous_map = Keymap::build(&initial).unwrap();
         let previous = BTreeMap::from([
             ("Email".into(), previous_map.key(0).into()),
@@ -387,10 +382,7 @@ mod tests {
 
     #[test]
     fn pinned_key_overrides_remembered_key() {
-        let entries = vec![
-            entry("Email", None, 1),
-            entry("Address", Some("E"), 1),
-        ];
+        let entries = vec![entry("Email", None, 1), entry("Address", Some("E"), 1)];
         let previous = BTreeMap::from([("Email".into(), "E".into())]);
         let map = Keymap::build_with_previous(&entries, &previous).unwrap();
         assert_eq!(map.key(1), "E");

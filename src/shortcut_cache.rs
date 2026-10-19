@@ -37,13 +37,19 @@ pub fn load(path: &Path) -> BTreeMap<String, String> {
     match fs::read(path) {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => BTreeMap::new(),
         Err(error) => {
-            eprintln!("trievium: cannot read shortcut cache at {}: {error}", path.display());
+            eprintln!(
+                "trievium: cannot read shortcut cache at {}: {error}",
+                path.display()
+            );
             BTreeMap::new()
         }
         Ok(data) => match serde_json::from_slice::<Cache>(&data) {
             Ok(cache) if cache.version == 1 => cache.keys,
             _ => {
-                eprintln!("trievium: ignoring unsupported/corrupt shortcut cache at {}", path.display());
+                eprintln!(
+                    "trievium: ignoring unsupported/corrupt shortcut cache at {}",
+                    path.display()
+                );
                 BTreeMap::new()
             }
         },
@@ -61,7 +67,9 @@ pub fn save(path: &Path, entries: &[Entry], map: &Keymap) -> Result<()> {
             .collect(),
     };
     let contents = serde_json::to_vec_pretty(&data)?;
-    let parent = path.parent().context("Shortcut cache has no parent directory")?;
+    let parent = path
+        .parent()
+        .context("Shortcut cache has no parent directory")?;
     fs::create_dir_all(parent).with_context(|| format!("Creating {}", parent.display()))?;
     let temporary = path.with_extension(format!("{}.tmp", std::process::id()));
     let result = (|| -> Result<()> {
@@ -73,12 +81,12 @@ pub fn save(path: &Path, entries: &[Entry], map: &Keymap) -> Result<()> {
             options.mode(0o600);
         }
         use std::io::Write;
-        let mut file = options.open(&temporary)
+        let mut file = options
+            .open(&temporary)
             .with_context(|| format!("Creating {}", temporary.display()))?;
         file.write_all(&contents)?;
         file.sync_all()?;
-        fs::rename(&temporary, path)
-            .with_context(|| format!("Saving {}", path.display()))?;
+        fs::rename(&temporary, path).with_context(|| format!("Saving {}", path.display()))?;
         Ok(())
     })();
     if result.is_err() {
@@ -93,7 +101,10 @@ mod tests {
 
     #[test]
     fn missing_cache_is_empty() {
-        let path = std::env::temp_dir().join(format!("trievium-missing-cache-{}.json", std::process::id()));
+        let path = std::env::temp_dir().join(format!(
+            "trievium-missing-cache-{}.json",
+            std::process::id()
+        ));
         assert!(load(&path).is_empty());
     }
 

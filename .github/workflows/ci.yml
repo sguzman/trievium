@@ -17,6 +17,8 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libwayland-dev libegl-dev libgl-dev libxcb-shape0-dev libxcb-xfixes0-dev libxcb-render0-dev pkg-config
       - name: Format
         run: cargo fmt --all -- --check
+      - name: Resolve dependencies
+        run: cargo generate-lockfile
       - name: Tests
         run: cargo test --locked
       - name: Clippy

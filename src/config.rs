@@ -27,8 +27,12 @@ fn is_zero(value: &i32) -> bool {
 
 impl Config {
     pub fn load(path: &Path) -> Result<Self> {
-        let content = fs::read_to_string(path)
-            .with_context(|| format!("Cannot read {}. Run 'trievium init' to make a starter file.", path.display()))?;
+        let content = fs::read_to_string(path).with_context(|| {
+            format!(
+                "Cannot read {}. Run 'trievium init' to make a starter file.",
+                path.display()
+            )
+        })?;
         let config: Self = serde_json::from_str(&content)
             .with_context(|| format!("Invalid JSON configuration at {}", path.display()))?;
         config.validate()?;
@@ -37,7 +41,10 @@ impl Config {
 
     pub fn validate(&self) -> Result<()> {
         if self.version != 1 {
-            bail!("Unsupported configuration version {} (expected 1)", self.version);
+            bail!(
+                "Unsupported configuration version {} (expected 1)",
+                self.version
+            );
         }
         if self.entries.is_empty() {
             bail!("At least one entry is required");
@@ -75,7 +82,10 @@ pub fn config_path(override_path: Option<PathBuf>) -> Result<PathBuf> {
 
 pub fn initialize(path: &Path) -> Result<()> {
     if path.exists() {
-        bail!("Refusing to overwrite existing configuration: {}", path.display());
+        bail!(
+            "Refusing to overwrite existing configuration: {}",
+            path.display()
+        );
     }
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).with_context(|| format!("Creating {}", parent.display()))?;
@@ -83,13 +93,31 @@ pub fn initialize(path: &Path) -> Result<()> {
     let example = Config {
         version: 1,
         entries: vec![
-            Entry { label: "Greeting".into(), text: "Hello!".into(), key: Some("G".into()), priority: 100 },
-            Entry { label: "Acknowledgement".into(), text: "Thank you, received.".into(), key: None, priority: 40 },
-            Entry { label: "Closing".into(), text: "Best regards,".into(), key: None, priority: 30 },
+            Entry {
+                label: "Greeting".into(),
+                text: "Hello!".into(),
+                key: Some("G".into()),
+                priority: 100,
+            },
+            Entry {
+                label: "Acknowledgement".into(),
+                text: "Thank you, received.".into(),
+                key: None,
+                priority: 40,
+            },
+            Entry {
+                label: "Closing".into(),
+                text: "Best regards,".into(),
+                key: None,
+                priority: 30,
+            },
         ],
     };
     // create_new avoids a race and will never overwrite a user's data.
-    let mut file = fs::OpenOptions::new().write(true).create_new(true).open(path)
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)
         .with_context(|| format!("Creating {}", path.display()))?;
     use std::io::Write;
     file.write_all(serde_json::to_string_pretty(&example)?.as_bytes())?;
@@ -103,13 +131,29 @@ mod tests {
 
     #[test]
     fn rejects_unsupported_version() {
-        let c = Config { version: 2, entries: vec![Entry { label: "A".into(), text: "X".into(), key: None, priority: 0 }] };
+        let c = Config {
+            version: 2,
+            entries: vec![Entry {
+                label: "A".into(),
+                text: "X".into(),
+                key: None,
+                priority: 0,
+            }],
+        };
         assert!(c.validate().is_err());
     }
 
     #[test]
     fn rejects_empty_text() {
-        let c = Config { version: 1, entries: vec![Entry { label: "A".into(), text: String::new(), key: None, priority: 0 }] };
+        let c = Config {
+            version: 1,
+            entries: vec![Entry {
+                label: "A".into(),
+                text: String::new(),
+                key: None,
+                priority: 0,
+            }],
+        };
         assert!(c.validate().is_err());
     }
 }

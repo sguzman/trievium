@@ -20,10 +20,14 @@ fn run() -> Result<()> {
         match arg.as_str() {
             "pick" | "init" | "validate" | "config-path" => command = arg,
             "--config" => {
-                override_path = Some(PathBuf::from(args.next().context("--config requires a path")?));
+                override_path = Some(PathBuf::from(
+                    args.next().context("--config requires a path")?,
+                ));
             }
             "--help" | "-h" => {
-                println!("Trievium - keyboard-first text selection\n\nUsage: trievium [pick|init|validate|config-path] [--config PATH]\n\nDefault: pick. Keys are automatically assigned unless pinned in the JSON config.");
+                println!(
+                    "Trievium - keyboard-first text selection\n\nUsage: trievium [pick|init|validate|config-path] [--config PATH]\n\nDefault: pick. Keys are automatically assigned unless pinned in the JSON config."
+                );
                 return Ok(());
             }
             other => bail!("Unknown argument '{other}'. Run trievium --help"),
@@ -46,7 +50,12 @@ fn run() -> Result<()> {
         _ => {
             let config = Config::load(&path)?;
             let map = Keymap::build(&config.entries)?;
-            let picker = Picker { config, map, prefix: String::new(), error: None };
+            let picker = Picker {
+                config,
+                map,
+                prefix: String::new(),
+                error: None,
+            };
             let native = eframe::NativeOptions {
                 renderer: eframe::Renderer::Glow,
                 viewport: egui::ViewportBuilder::default()
@@ -57,8 +66,12 @@ fn run() -> Result<()> {
                     .with_decorations(false),
                 ..Default::default()
             };
-            eframe::run_native("trievium", native, Box::new(move |_cc| Ok(Box::new(picker))))
-                .map_err(|err| anyhow::anyhow!("Cannot launch picker: {err}"))?;
+            eframe::run_native(
+                "trievium",
+                native,
+                Box::new(move |_cc| Ok(Box::new(picker))),
+            )
+            .map_err(|err| anyhow::anyhow!("Cannot launch picker: {err}"))?;
         }
     }
     Ok(())
@@ -92,7 +105,10 @@ impl Picker {
             }
             Lookup::Continue => false,
             Lookup::Invalid => {
-                self.error = Some(format!("No selection matches '{}'. Backspace to correct.", self.prefix));
+                self.error = Some(format!(
+                    "No selection matches '{}'. Backspace to correct.",
+                    self.prefix
+                ));
                 false
             }
         }
@@ -105,11 +121,19 @@ impl eframe::App for Picker {
         let events = ui.input(|input| input.events.clone());
         for event in events {
             match event {
-                egui::Event::Key { key: egui::Key::Escape, pressed: true, .. } => {
+                egui::Event::Key {
+                    key: egui::Key::Escape,
+                    pressed: true,
+                    ..
+                } => {
                     ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                     return;
                 }
-                egui::Event::Key { key: egui::Key::Backspace, pressed: true, .. } => {
+                egui::Event::Key {
+                    key: egui::Key::Backspace,
+                    pressed: true,
+                    ..
+                } => {
                     self.prefix.pop();
                     self.error = None;
                 }
@@ -131,38 +155,55 @@ impl eframe::App for Picker {
             ui.label(egui::RichText::new("type to select · Esc closes").weak());
         });
         ui.add_space(5.0);
-        let prompt = if self.prefix.is_empty() { "Press a highlighted key".to_owned() }
-            else { format!("Sequence: {}", self.prefix) };
+        let prompt = if self.prefix.is_empty() {
+            "Press a highlighted key".to_owned()
+        } else {
+            format!("Sequence: {}", self.prefix)
+        };
         ui.label(egui::RichText::new(prompt).size(17.0).strong());
         if let Some(error) = &self.error {
             ui.colored_label(egui::Color32::from_rgb(240, 126, 126), error);
         } else {
-            ui.label(egui::RichText::new("A complete sequence copies immediately and closes.").small().weak());
+            ui.label(
+                egui::RichText::new("A complete sequence copies immediately and closes.")
+                    .small()
+                    .weak(),
+            );
         }
         ui.separator();
 
         let mut visible: Vec<usize> = self.map.matching(&self.prefix).collect();
         visible.sort_by(|&a, &b| self.map.key(a).cmp(self.map.key(b)));
         let mut clicked = None;
-        egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
-            for index in visible {
-                let entry = &self.config.entries[index];
-                ui.horizontal(|ui| {
-                    let sequence = self.map.key(index);
-                    if ui.add_sized([85.0, 31.0], egui::Button::new(egui::RichText::new(sequence).monospace().strong())).clicked() {
-                        clicked = Some(index);
-                    }
-                    if ui.selectable_label(false, &entry.label).clicked() {
-                        clicked = Some(index);
-                    }
-                    ui.add_space(5.0);
-                    let preview = entry.text.lines().next().unwrap_or("");
-                    let preview: String = preview.chars().take(45).collect();
-                    ui.label(egui::RichText::new(preview).weak().small());
-                });
-                ui.separator();
-            }
-        });
+        egui::ScrollArea::vertical()
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                for index in visible {
+                    let entry = &self.config.entries[index];
+                    ui.horizontal(|ui| {
+                        let sequence = self.map.key(index);
+                        if ui
+                            .add_sized(
+                                [85.0, 31.0],
+                                egui::Button::new(
+                                    egui::RichText::new(sequence).monospace().strong(),
+                                ),
+                            )
+                            .clicked()
+                        {
+                            clicked = Some(index);
+                        }
+                        if ui.selectable_label(false, &entry.label).clicked() {
+                            clicked = Some(index);
+                        }
+                        ui.add_space(5.0);
+                        let preview = entry.text.lines().next().unwrap_or("");
+                        let preview: String = preview.chars().take(45).collect();
+                        ui.label(egui::RichText::new(preview).weak().small());
+                    });
+                    ui.separator();
+                }
+            });
         if let Some(index) = clicked {
             self.select(index, &ctx);
         }

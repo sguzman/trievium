@@ -68,7 +68,10 @@ impl Keymap {
         for (i, e) in entries.iter().enumerate() {
             if let Some(key) = &e.key {
                 let code = key.trim().to_ascii_uppercase();
-                if code.is_empty() || code.len() > MAX_DEPTH || !code.bytes().all(|c| c.is_ascii_uppercase()) {
+                if code.is_empty()
+                    || code.len() > MAX_DEPTH
+                    || !code.bytes().all(|c| c.is_ascii_uppercase())
+                {
                     bail!("Invalid key for '{}': use 1-4 ASCII letters A-Z", e.label);
                 }
                 root.insert(&code, i)?;
@@ -80,7 +83,9 @@ impl Keymap {
         }
 
         auto.sort_by(|&a, &b| {
-            entries[b].priority.cmp(&entries[a].priority)
+            entries[b]
+                .priority
+                .cmp(&entries[a].priority)
                 .then_with(|| entries[a].label.cmp(&entries[b].label))
                 .then_with(|| a.cmp(&b))
         });
@@ -94,7 +99,9 @@ impl Keymap {
                 let used: usize = pinned.iter().map(|c| capacity(level - c.len())).sum();
                 capacity(level).saturating_sub(used) >= auto.len()
             })
-            .ok_or_else(|| anyhow::anyhow!("Too many entries for keys of up to {MAX_DEPTH} letters"))?;
+            .ok_or_else(|| {
+                anyhow::anyhow!("Too many entries for keys of up to {MAX_DEPTH} letters")
+            })?;
 
         let used: usize = pinned.iter().map(|c| capacity(depth - c.len())).sum();
         let mut free = capacity(depth) - used;
@@ -104,11 +111,22 @@ impl Keymap {
             let mut chosen = None;
             for len in 1..=depth {
                 let mut candidate = String::with_capacity(len);
-                if find_candidate(&root, &order, len, &mut candidate, free, remaining_after, depth, &mut chosen) {
+                if find_candidate(
+                    &root,
+                    &order,
+                    len,
+                    &mut candidate,
+                    free,
+                    remaining_after,
+                    depth,
+                    &mut chosen,
+                ) {
                     break;
                 }
             }
-            let code = chosen.ok_or_else(|| anyhow::anyhow!("Cannot assign a key to '{}'", entries[entry_index].label))?;
+            let code = chosen.ok_or_else(|| {
+                anyhow::anyhow!("Cannot assign a key to '{}'", entries[entry_index].label)
+            })?;
             free -= capacity(depth - code.len());
             root.insert(&code, entry_index)?;
             keys[entry_index] = code;
@@ -131,7 +149,9 @@ impl Keymap {
     }
 
     pub fn matching<'a>(&'a self, prefix: &'a str) -> impl Iterator<Item = usize> + 'a {
-        self.keys.iter().enumerate()
+        self.keys
+            .iter()
+            .enumerate()
             .filter(move |(_, code)| code.starts_with(prefix))
             .map(|(index, _)| index)
     }
@@ -150,7 +170,11 @@ fn capacity(exponent: usize) -> usize {
 
 fn alphabet_order(label: &str) -> Vec<char> {
     let mut result = Vec::with_capacity(26);
-    for c in label.chars().flat_map(char::to_uppercase).chain(ALPHABET.chars()) {
+    for c in label
+        .chars()
+        .flat_map(char::to_uppercase)
+        .chain(ALPHABET.chars())
+    {
         if c.is_ascii_uppercase() && !result.contains(&c) {
             result.push(c);
         }
@@ -178,7 +202,16 @@ fn find_candidate(
     }
     for &c in order {
         candidate.push(c);
-        if find_candidate(root, order, length, candidate, free, remaining_after, max_depth, chosen) {
+        if find_candidate(
+            root,
+            order,
+            length,
+            candidate,
+            free,
+            remaining_after,
+            max_depth,
+            chosen,
+        ) {
             return true;
         }
         candidate.pop();
@@ -191,12 +224,21 @@ mod tests {
     use super::*;
 
     fn entry(label: &str, key: Option<&str>, priority: i32) -> Entry {
-        Entry { label: label.into(), text: "some text".into(), key: key.map(str::to_owned), priority }
+        Entry {
+            label: label.into(),
+            text: "some text".into(),
+            key: key.map(str::to_owned),
+            priority,
+        }
     }
 
     #[test]
     fn mnemonic_single_keys_and_selection() {
-        let items = vec![entry("Email", None, 9), entry("Address", None, 5), entry("Signature", None, 1)];
+        let items = vec![
+            entry("Email", None, 9),
+            entry("Address", None, 5),
+            entry("Signature", None, 1),
+        ];
         let map = Keymap::build(&items).unwrap();
         assert_eq!(map.key(0), "E");
         assert_eq!(map.key(1), "A");
@@ -221,7 +263,9 @@ mod tests {
 
     #[test]
     fn grows_beyond_single_character_capacity() {
-        let items: Vec<_> = (0..60).map(|i| entry(&format!("Entry {i}"), None, 0)).collect();
+        let items: Vec<_> = (0..60)
+            .map(|i| entry(&format!("Entry {i}"), None, 0))
+            .collect();
         let map = Keymap::build(&items).unwrap();
         assert_eq!(map.keys.len(), 60);
         for (i, code) in map.keys.iter().enumerate() {
@@ -237,8 +281,12 @@ mod tests {
 
     #[test]
     fn handles_pinned_nested_alphabet_and_available_space() {
-        let items = vec![entry("A", Some("AB"), 0), entry("B", Some("Z"), 0),
-            entry("C", None, 99), entry("D", None, 1)];
+        let items = vec![
+            entry("A", Some("AB"), 0),
+            entry("B", Some("Z"), 0),
+            entry("C", None, 99),
+            entry("D", None, 1),
+        ];
         let map = Keymap::build(&items).unwrap();
         assert_eq!(map.lookup("A"), Lookup::Continue);
         assert_eq!(map.lookup("AB"), Lookup::Selected(0));

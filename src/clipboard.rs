@@ -14,11 +14,16 @@ pub fn copy_text(text: &str) -> Result<()> {
         .context("Could not start wl-copy. Install wl-clipboard and run under a Wayland session")?;
 
     if let Some(mut stdin) = child.stdin.take() {
-        stdin.write_all(text.as_bytes()).context("Writing clipboard content")?;
+        stdin
+            .write_all(text.as_bytes())
+            .context("Writing clipboard content")?;
     }
     let output = child.wait_with_output().context("Waiting for wl-copy")?;
     if !output.status.success() {
-        bail!("wl-copy failed: {}", String::from_utf8_lossy(&output.stderr).trim());
+        bail!(
+            "wl-copy failed: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
     }
     Ok(())
 }

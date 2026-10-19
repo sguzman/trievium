@@ -35,7 +35,7 @@ Clipboard managers may record selected content. Users should not put passwords/s
 ## Quality / future work
 
 - Verify interactive focus, float placement, theme and latency on a real Hyprland session. The GitHub CI environment has no compositor; compiling does not establish native interactive correctness.
-- Measure cold-start overhead and reduce it. Initial OpenGL/egui startup is not guaranteed instant; benchmark before promising latency.
+- Measure cold-start overhead and reduce it. The current UI limits initial window height and virtualizes large lists, but initial OpenGL/egui startup is not guaranteed instant; benchmark before promising latency.
 - Extend backends only after stable text/clipboard operation, with explicit and auditable actions.
 - Optional lightweight editor and importers for Lexwright / external datasets, without putting the editor on the hot path.
 - Optional stable assignment cache if pinning individual keys becomes cumbersome.

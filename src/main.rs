@@ -58,6 +58,8 @@ fn run() -> Result<()> {
             if let Err(error) = shortcut_cache::save(&cache_path, &config.entries, &map) {
                 eprintln!("trievium: cannot save automatic key assignments: {error:#}");
             }
+            let window_height = (125.0 + config.entries.len().min(9) as f32 * 39.0)
+                .clamp(245.0, 490.0);
             let picker = Picker {
                 config,
                 map,
@@ -69,7 +71,7 @@ fn run() -> Result<()> {
                 viewport: egui::ViewportBuilder::default()
                     .with_title("Trievium")
                     .with_app_id("trievium")
-                    .with_inner_size([560.0, 450.0])
+                    .with_inner_size([560.0, window_height])
                     .with_min_inner_size([400.0, 250.0])
                     .with_decorations(false),
                 ..Default::default()
@@ -182,11 +184,40 @@ impl eframe::App for Picker {
 
         let mut visible: Vec<usize> = self.map.matching(&self.prefix).collect();
         visible.sort_by(|&a, &b| self.map.key(a).cmp(self.map.key(b)));
+        if self.prefix.is_empty() {
+            ui.label(
+                egui::RichText::new(format!("{} entries", visible.len()))
+                    .small()
+                    .weak(),
+            );
+        } else {
+            let mut next: Vec<char> = visible
+                .iter()
+                .filter_map(|&index| self.map.key(index).chars().nth(self.prefix.len()))
+                .collect();
+            next.sort_unstable();
+            next.dedup();
+            if !next.is_empty() {
+                ui.label(
+                    egui::RichText::new(format!(
+                        "{} matches · next keys: {}",
+                        visible.len(),
+                        next.into_iter().collect::<String>()
+                    ))
+                    .small()
+                    .weak(),
+                );
+            }
+        }
+
+        // Virtualize instead of allocating/rendering every row every frame.
+        // Large libraries should not stall the picker when it opens.
         let mut clicked = None;
         egui::ScrollArea::vertical()
             .auto_shrink([false, false])
-            .show(ui, |ui| {
-                for index in visible {
+            .show_rows(ui, 39.0, visible.len(), |ui, rows| {
+                for row in rows {
+                    let index = visible[row];
                     let entry = &self.config.entries[index];
                     ui.horizontal(|ui| {
                         let sequence = self.map.key(index);

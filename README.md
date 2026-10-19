@@ -34,6 +34,7 @@ Replace the absolute path with your actual location. Choose a keybind that does 
 - `T` could reveal several choices, with `TA` and `TB` as terminal sequences.
 - `Esc` closes without copying; `Backspace` corrects a partial sequence.
 - Clicking a row or its key badge also copies and exits.
+- The popup sizes itself to the entry count (up to a maximum), shows remaining key choices, and virtualizes long lists for responsive scrolling.
 - A failed clipboard operation displays an error and **does not exit**.
 - `wl-copy` runs without `--foreground`, leaving clipboard ownership alive after the UI exits. Paste normally into the previous application.
 

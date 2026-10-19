@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "label": "Greeting",
+      "text": "Hello!",
+      "key": "G",
+      "priority": 100
+    },
+    {
+      "label": "Acknowledgement",
+      "text": "Thank you, received.",
+      "priority": 40
+    },
+    {
+      "label": "Closing",
+      "text": "Best regards,",
+      "priority": 30
+    }
+  ]
+}

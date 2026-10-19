@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use trievium::clipboard::copy_text;
 use trievium::config::{self, Config};
 use trievium::trie::{Keymap, Lookup};
+use trievium::shortcut_cache;
 
 fn main() {
     if let Err(error) = run() {
@@ -42,14 +43,21 @@ fn run() -> Result<()> {
         "config-path" => println!("{}", path.display()),
         "validate" => {
             let config = Config::load(&path)?;
-            let map = Keymap::build(&config.entries)?;
+            let cache_path = shortcut_cache::path_for_config(&path)?;
+            let previous = shortcut_cache::load(&cache_path);
+            let map = Keymap::build_with_previous(&config.entries, &previous)?;
             for (index, entry) in config.entries.iter().enumerate() {
                 println!("{:<5} {}", map.key(index), entry.label);
             }
         }
         _ => {
             let config = Config::load(&path)?;
-            let map = Keymap::build(&config.entries)?;
+            let cache_path = shortcut_cache::path_for_config(&path)?;
+            let previous = shortcut_cache::load(&cache_path);
+            let map = Keymap::build_with_previous(&config.entries, &previous)?;
+            if let Err(error) = shortcut_cache::save(&cache_path, &config.entries, &map) {
+                eprintln!("trievium: cannot save automatic key assignments: {error:#}");
+            }
             let picker = Picker {
                 config,
                 map,

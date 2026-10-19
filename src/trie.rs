@@ -57,6 +57,15 @@ pub struct Keymap {
 
 impl Keymap {
     pub fn build(entries: &[Entry]) -> Result<Self> {
+        Self::build_with_previous(entries, &BTreeMap::new())
+    }
+
+    /// Reuse locally remembered keys whenever they remain compatible.
+    /// A pinned key always overrides an automatically remembered one.
+    pub fn build_with_previous(
+        entries: &[Entry],
+        previous: &BTreeMap<String, String>,
+    ) -> Result<Self> {
         if entries.is_empty() {
             bail!("Cannot build an empty keymap");
         }
@@ -93,7 +102,20 @@ impl Keymap {
         // Each terminal at depth d consumes 26^(L-d) slots at depth L.
         // Preserve enough free slots for every remaining entry before taking
         // a shorter mnemonic. This avoids the greedy 26-single-keys dead end.
-        let min_depth = pinned.iter().map(String::len).max().unwrap_or(1);
+        let remembered_depth = entries
+            .iter()
+            .filter(|entry| entry.key.is_none())
+            .filter_map(|entry| previous.get(&entry.label))
+            .filter(|key| valid_key(key))
+            .map(String::len)
+            .max()
+            .unwrap_or(1);
+        let min_depth = pinned
+            .iter()
+            .map(String::len)
+            .max()
+            .unwrap_or(1)
+            .max(remembered_depth);
         let depth = (min_depth..=MAX_DEPTH)
             .find(|&level| {
                 let used: usize = pinned.iter().map(|c| capacity(level - c.len())).sum();
@@ -105,8 +127,34 @@ impl Keymap {
 
         let used: usize = pinned.iter().map(|c| capacity(depth - c.len())).sum();
         let mut free = capacity(depth) - used;
-        for (position, &entry_index) in auto.iter().enumerate() {
-            let remaining_after = auto.len() - position - 1;
+        // Keep existing mnemonic assignments unless they conflict with pinned
+        // keys or would exhaust all available space for the remaining entries.
+        // If every letter has already been used, the least-prioritized
+        // remembered shortcut yields to longer sequences.
+        for (position, &index) in auto.iter().enumerate() {
+            let Some(code) = previous.get(&entries[index].label) else {
+                continue;
+            };
+            if !valid_key(code) || code.len() > depth || root.conflicts(code) {
+                continue;
+            }
+            let cost = capacity(depth - code.len());
+            let remaining = auto.len() - position - 1;
+            if cost > free || free - cost < remaining {
+                continue;
+            }
+            root.insert(code, index)?;
+            keys[index] = code.clone();
+            free -= cost;
+        }
+
+        let remaining_entries: Vec<usize> = auto
+            .iter()
+            .copied()
+            .filter(|index| keys[*index].is_empty())
+            .collect();
+        for (position, &entry_index) in remaining_entries.iter().enumerate() {
+            let remaining_after = remaining_entries.len() - position - 1;
             let order = alphabet_order(&entries[entry_index].label);
             let mut chosen = None;
             for len in 1..=depth {
@@ -163,6 +211,12 @@ pub enum Lookup {
     Selected(usize),
 }
 
+fn valid_key(key: &str) -> bool {
+    !key.is_empty()
+        && key.len() <= MAX_DEPTH
+        && key.bytes().all(|byte| byte.is_ascii_uppercase())
+}
+
 fn capacity(exponent: usize) -> usize {
     26usize.pow(exponent as u32)
 }
@@ -195,6 +249,16 @@ fn find_candidate(
     candidate: &mut String,
     chosen: &mut Option<String>,
 ) -> bool {
+    // A terminal at an intermediate prefix excludes its entire subtree.
+    // Prune it before traversing thousands of impossible longer sequences.
+    if !candidate.is_empty()
+        && search
+            .root
+            .get(candidate)
+            .is_some_and(|node| node.terminal.is_some())
+    {
+        return false;
+    }
     if candidate.len() == search.length {
         let cost = capacity(search.max_depth - search.length);
         if cost <= search.free
@@ -289,6 +353,70 @@ mod tests {
         assert_eq!(map.lookup("AB"), Lookup::Selected(0));
         assert_eq!(map.lookup("Z"), Lookup::Selected(1));
         assert_eq!(map.lookup(map.key(2)), Lookup::Selected(2));
+    }
+
+    #[test]
+    fn remembers_shortcuts_after_adding_entries() {
+        let initial = vec![
+            entry("Email", None, 9),
+            entry("Address", None, 4),
+        ];
+        let previous_map = Keymap::build(&initial).unwrap();
+        let previous = BTreeMap::from([
+            ("Email".into(), previous_map.key(0).into()),
+            ("Address".into(), previous_map.key(1).into()),
+        ]);
+        let expanded = vec![
+            entry("Email", None, 9),
+            entry("Address", None, 4),
+            entry("Express", None, 100),
+        ];
+        let map = Keymap::build_with_previous(&expanded, &previous).unwrap();
+        assert_eq!(map.key(0), previous_map.key(0));
+        assert_eq!(map.key(1), previous_map.key(1));
+        assert_eq!(map.lookup(map.key(2)), Lookup::Selected(2));
+    }
+
+    #[test]
+    fn pinned_key_overrides_remembered_key() {
+        let entries = vec![
+            entry("Email", None, 1),
+            entry("Address", Some("E"), 1),
+        ];
+        let previous = BTreeMap::from([("Email".into(), "E".into())]);
+        let map = Keymap::build_with_previous(&entries, &previous).unwrap();
+        assert_eq!(map.key(1), "E");
+        assert_ne!(map.key(0), "E");
+    }
+
+    #[test]
+    fn recovers_when_all_single_letters_were_remembered() {
+        let initial: Vec<_> = ('A'..='Z')
+            .map(|c| entry(&c.to_string(), Some(&c.to_string()), 0))
+            .collect();
+        // A cache can contain 26 old automatic bindings. Adding an item
+        // requires one of those bindings to grow; no terminal can prefix it.
+        let previous: BTreeMap<_, _> = initial
+            .iter()
+            .map(|e| (e.label.clone(), e.key.clone().unwrap()))
+            .collect();
+        let mut expanded: Vec<_> = ('A'..='Z')
+            .map(|c| entry(&c.to_string(), None, 0))
+            .collect();
+        expanded.push(entry("New", None, 99));
+        let map = Keymap::build_with_previous(&expanded, &previous).unwrap();
+        assert!(map.key(26).len() > 1);
+        for (index, code) in (0..expanded.len()).map(|i| (i, map.key(i))) {
+            assert_eq!(map.lookup(code), Lookup::Selected(index));
+        }
+    }
+
+    #[test]
+    fn ignores_malformed_cached_keys() {
+        let entries = vec![entry("Email", None, 0)];
+        let previous = BTreeMap::from([("Email".into(), "E!BAD".into())]);
+        let map = Keymap::build_with_previous(&entries, &previous).unwrap();
+        assert_eq!(map.key(0), "E");
     }
 
     #[test]

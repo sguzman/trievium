@@ -49,7 +49,7 @@ The JSON file has `version: 1` and an `entries` array. Each entry has `label` an
 }
 ```
 
-The shortcut generator tries mnemonic letters first, while reserving sufficient longer-key capacity for all entries. **Automatic assignments may change when entries are added or reprioritized**; pin favorites using `key` to stabilize muscle memory. `trievium validate` prints the entire generated assignment without opening a window.
+The shortcut generator tries mnemonic letters first, reserving longer-key capacity for all entries. **Automatic key assignments are remembered between launches**, including when new entries are added. This best-effort cache lives under `$XDG_STATE_HOME/trievium/` (normally `~/.local/state/trievium/`), with a separate cache per configuration file. It stores **labels and keys only**, never clipboard text. Pinned `key` values always take precedence. If every existing single-letter key is occupied, one or more automatic keys must change to make room; pinned keys never move. `trievium validate` prints assignments without writing the cache, and opening the picker saves them. Renaming an entry changes its identity; labels must be unique.
 
 ## Development
 
@@ -63,6 +63,6 @@ See [architecture](docs/ARCHITECTURE.md) for algorithm details, constraints and 
 
 ## Status
 
-**v0.1.0 bootstrap:** file-backed plaintext selection, deterministic prefix-free assignment, CLI validation, native picker and Wayland clipboard. This is an initial implementation, **not yet personally dogfooded on Hyprland**. No tray, background service, editor, Lexwright importer, automated typing, or generalized actions yet. Keeping those out of the picker is intentional.
+**v0.2.0 ongoing development:** file-backed plaintext selection, deterministic prefix-free assignment, CLI validation, native picker and Wayland clipboard. This is an initial implementation, **not yet personally dogfooded on Hyprland**. No tray, background service, editor, Lexwright importer, automated typing, or generalized actions yet. Keeping those out of the picker is intentional.
 
 MIT licensed; see [LICENSE](LICENSE).

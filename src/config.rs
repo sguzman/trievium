@@ -1,5 +1,6 @@
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -52,9 +53,13 @@ impl Config {
         if self.entries.len() > 10_000 {
             bail!("Maximum 10000 entries");
         }
+        let mut labels = BTreeSet::new();
         for (index, entry) in self.entries.iter().enumerate() {
             if entry.label.trim().is_empty() {
                 bail!("Entry {} has an empty label", index + 1);
+            }
+            if !labels.insert(&entry.label) {
+                bail!("Duplicate label '{}': labels identify persistent key assignments", entry.label);
             }
             if entry.text.is_empty() {
                 bail!("Entry '{}' has no text to copy", entry.label);
@@ -114,10 +119,14 @@ pub fn initialize(path: &Path) -> Result<()> {
         ],
     };
     // create_new avoids a race and will never overwrite a user's data.
-    let mut file = fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(path)
+    let mut options = fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let mut file = options.open(path)
         .with_context(|| format!("Creating {}", path.display()))?;
     use std::io::Write;
     file.write_all(serde_json::to_string_pretty(&example)?.as_bytes())?;
@@ -141,6 +150,13 @@ mod tests {
             }],
         };
         assert!(c.validate().is_err());
+    }
+
+    #[test]
+    fn rejects_duplicate_labels() {
+        let item = Entry { label: "Same".into(), text: "X".into(), key: None, priority: 0 };
+        let config = Config { version: 1, entries: vec![item.clone(), item] };
+        assert!(config.validate().is_err());
     }
 
     #[test]

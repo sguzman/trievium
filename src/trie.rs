@@ -264,9 +264,10 @@ fn find_candidate(
     // Skip not only terminal prefixes but whole subtrees already saturated
     // by shorter keys or a complete set of longer terminal keys.
     if !candidate.is_empty()
-        && search.root.get(candidate).is_some_and(|node| {
-            node.used_slots == capacity(MAX_DEPTH - candidate.len())
-        })
+        && search
+            .root
+            .get(candidate)
+            .is_some_and(|node| node.used_slots == capacity(MAX_DEPTH - candidate.len()))
     {
         return false;
     }

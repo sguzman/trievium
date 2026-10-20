@@ -390,7 +390,8 @@ mod tests {
         let map = Keymap::build(&[
             entry("Technical", Some("TA"), 0),
             entry("Closing", Some("C"), 0),
-        ]).unwrap();
+        ])
+        .unwrap();
         assert_eq!(map.lookup(""), Lookup::Continue);
         assert_eq!(map.lookup("T"), Lookup::Selected(0));
         assert_eq!(map.lookup("TA"), Lookup::Selected(0));
@@ -405,7 +406,8 @@ mod tests {
             entry("Technical Brief", Some("TB"), 0),
             entry("Technical Answer", Some("TA"), 0),
             entry("Goodbye", Some("G"), 0),
-        ]).unwrap();
+        ])
+        .unwrap();
         assert_eq!(map.lookup("T"), Lookup::Continue);
         assert_eq!(map.lookup("TB"), Lookup::Selected(0));
         assert_eq!(map.lookup("TA"), Lookup::Selected(1));

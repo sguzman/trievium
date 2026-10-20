@@ -73,7 +73,7 @@ impl Keymap {
         previous: &BTreeMap<String, String>,
     ) -> Result<Self> {
         if entries.is_empty() {
-            bail!("Cannot build an empty keymap");
+            return Ok(Self { root: Node::default(), keys: Vec::new() });
         }
         let mut root = Node::default();
         let mut keys = vec![String::new(); entries.len()];
@@ -303,6 +303,13 @@ mod tests {
             key: key.map(str::to_owned),
             priority,
         }
+    }
+
+    #[test]
+    fn allows_zero_entries_and_selects_nothing() {
+        let map = Keymap::build(&[]).unwrap();
+        assert_eq!(map.matching("").count(), 0);
+        assert_eq!(map.lookup("A"), Lookup::Invalid);
     }
 
     #[test]

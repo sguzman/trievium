@@ -47,9 +47,6 @@ impl Config {
                 self.version
             );
         }
-        if self.entries.is_empty() {
-            bail!("At least one entry is required");
-        }
         if self.entries.len() > 10_000 {
             bail!("Maximum 10000 entries");
         }
@@ -86,6 +83,65 @@ pub fn config_path(override_path: Option<PathBuf>) -> Result<PathBuf> {
     }
     let home = std::env::var_os("HOME").context("HOME or XDG_CONFIG_HOME is required")?;
     Ok(PathBuf::from(home).join(".config/trievium/items.json"))
+}
+
+/// Atomically replace a local configuration, but refuse to overwrite
+/// changes made outside this editor since it loaded the file.
+pub fn save_atomic(path: &Path, config: &Config, expected_file: &[u8]) -> Result<Vec<u8>> {
+    config.validate()?;
+    let current = fs::read(path)
+        .with_context(|| format!("Reading existing configuration {}", path.display()))?;
+    if current != expected_file {
+        bail!("Configuration changed on disk. Reopen the editor to avoid overwriting external changes.");
+    }
+    let mut content = serde_json::to_vec_pretty(config)?;
+    content.push(b'\n');
+    let parent = path.parent().context("Configuration path has no parent directory")?;
+    let name = path.file_name().context("Configuration path has no filename")?;
+    let mut options = fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let mut temp_path = None;
+    let result = (|| -> Result<()> {
+        use std::io::Write;
+        for n in 0..100 {
+            let candidate = parent.join(format!(
+                ".{}.{}.{}.tmp",
+                name.to_string_lossy(),
+                std::process::id(),
+                n
+            ));
+            match options.open(&candidate) {
+                Ok(mut file) => {
+                    temp_path = Some(candidate);
+                    file.write_all(&content)?;
+                    file.sync_all()?;
+                    // Recheck directly before committing: never silently
+                    // clobber a file edited while this dialog was open.
+                    if fs::read(path)? != expected_file {
+                        bail!("Configuration changed on disk. Reopen the editor before saving.");
+                    }
+                    fs::rename(temp_path.as_ref().unwrap(), path)
+                        .with_context(|| format!("Saving {}", path.display()))?;
+                    return Ok(());
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                Err(error) => return Err(error).context("Creating temporary configuration file"),
+            }
+        }
+        bail!("No unique temporary path available for configuration save");
+    })();
+    if let Some(path) = temp_path {
+        if result.is_err() {
+            let _ = fs::remove_file(path);
+        }
+    }
+    result?;
+    Ok(content)
 }
 
 pub fn initialize(path: &Path) -> Result<()> {
@@ -141,6 +197,38 @@ pub fn initialize(path: &Path) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn accepts_empty_collection_for_in_app_management() {
+        let c = Config { version: 1, entries: vec![] };
+        c.validate().unwrap();
+    }
+
+    #[test]
+    fn atomic_save_preserves_external_edits() {
+        let dir = std::env::temp_dir().join(format!("trievium-config-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("items.json");
+        let first = Config {
+            version: 1,
+            entries: vec![Entry {
+                label: "Example".into(),
+                text: "Hello!".into(),
+                key: Some("E".into()),
+                priority: 0,
+            }],
+        };
+        let initial = serde_json::to_vec(&first).unwrap();
+        std::fs::write(&path, &initial).unwrap();
+        let updated = Config { version: 1, entries: vec![] };
+        let bytes = save_atomic(&path, &updated, &initial).unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), bytes);
+        assert_eq!(Config::load(&path).unwrap().entries.len(), 0);
+        std::fs::write(&path, b"external change").unwrap();
+        assert!(save_atomic(&path, &first, &bytes).is_err());
+        assert_eq!(std::fs::read(&path).unwrap(), b"external change");
+        let _ = std::fs::remove_dir_all(dir);
+    }
 
     #[test]
     fn rejects_unsupported_version() {

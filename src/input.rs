@@ -120,7 +120,13 @@ impl KeyboardInput {
 /// Never print arbitrary text payloads or clipboard contents.
 pub fn describe_event(event: &Event) -> String {
     match event {
-        Event::Key { key, pressed, repeat, modifiers, .. } => {
+        Event::Key {
+            key,
+            pressed,
+            repeat,
+            modifiers,
+            ..
+        } => {
             format!("key={key:?} pressed={pressed} repeat={repeat} mods={modifiers:?}")
         }
         Event::Text(text) => format!("text_event bytes={} (content omitted)", text.len()),

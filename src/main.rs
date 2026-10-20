@@ -70,9 +70,11 @@ fn run() -> Result<()> {
             // picker, without killing or disturbing the existing process.
             let _instance_guard = match launch::acquire()? {
                 Some(Instance::Busy) => {
-                    eprintln!("trievium: another picker is already running. Close it before retrying.");
+                    eprintln!(
+                        "trievium: another picker is already running. Close it before retrying."
+                    );
                     return Ok(());
-                },
+                }
                 guard => guard,
             };
             let config = Config::load(&path)?;
@@ -103,7 +105,10 @@ fn run() -> Result<()> {
             picker.refresh_choices();
             if diagnose_input {
                 eprintln!("trievium diagnostics: active (no snippet text is recorded)");
-                eprintln!("trievium diagnostics: app version {}", env!("CARGO_PKG_VERSION"));
+                eprintln!(
+                    "trievium diagnostics: app version {}",
+                    env!("CARGO_PKG_VERSION")
+                );
             }
             let native = eframe::NativeOptions {
                 renderer: eframe::Renderer::Glow,
@@ -212,7 +217,10 @@ impl Picker {
 
     fn select(&mut self, index: usize, ctx: &egui::Context) {
         if self.diagnose_input {
-            eprintln!("trievium diagnostics: shortcut {} selected; copying", self.map.key(index));
+            eprintln!(
+                "trievium diagnostics: shortcut {} selected; copying",
+                self.map.key(index)
+            );
         }
         match copy_text(&self.config.entries[index].text) {
             Ok(()) => {
@@ -269,7 +277,10 @@ impl eframe::App for Picker {
                 self.last_focus = Some(focused);
             }
             for event in &events {
-                eprintln!("trievium diagnostics: {}", trievium::input::describe_event(event));
+                eprintln!(
+                    "trievium diagnostics: {}",
+                    trievium::input::describe_event(event)
+                );
             }
         }
         for action in self
@@ -300,7 +311,11 @@ impl eframe::App for Picker {
 
         ui.add_space(10.0);
         if self.diagnose_input {
-            ui.label(egui::RichText::new("Input diagnostic mode · see terminal").small().weak());
+            ui.label(
+                egui::RichText::new("Input diagnostic mode · see terminal")
+                    .small()
+                    .weak(),
+            );
         }
         ui.horizontal(|ui| {
             ui.heading("Trievium");

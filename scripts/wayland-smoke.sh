@@ -177,3 +177,89 @@ wtype -k Escape
 wait_for_picker_exit
 cmp "$config" "$XDG_RUNTIME_DIR/original-config.json"
 echo "Wayland manager E2E passed: Escape closed editor and preserved configuration."
+
+# Shortest-unique-prefix regression. A reserved 'qz' must select after 'q'
+# alone if no other key begins with q. A branch shared by 'ta' and 'tb'
+# must wait for its disambiguating second letter. Unknown keys do nothing.
+unique_config="$XDG_RUNTIME_DIR/unique-config.json"
+cat > "$unique_config" <<'JSON'
+{"version":1,"entries":[
+  {"label":"Quick","text":"Unique prefix selected","key":"QZ"},
+  {"label":"Closing","text":"Closing alternative","key":"C"}
+]}
+JSON
+./target/debug/trievium --config "$unique_config" >"$XDG_RUNTIME_DIR/unique.log" 2>&1 &
+picker_pid=$!
+for _ in $(seq 1 100); do
+  if swaymsg -s "$sway_sock" -t get_tree | grep -q '"app_id": "trievium"'; then
+    break
+  fi
+  sleep 0.1
+done
+swaymsg -s "$sway_sock" '[app_id="trievium"] focus'
+sleep 0.2
+wtype q
+copied=""
+for _ in $(seq 1 70); do
+  copied=$(wl-paste -n 2>/dev/null || true)
+  if [[ "$copied" == "Unique prefix selected" ]]; then
+    break
+  fi
+  sleep 0.1
+done
+if [[ "$copied" != "Unique prefix selected" ]]; then
+  echo "Single unique prefix did not copy without remaining reserved letters" >&2
+  cat "$XDG_RUNTIME_DIR/unique.log" >&2
+  exit 1
+fi
+wait_for_picker_exit
+
+ambiguous_config="$XDG_RUNTIME_DIR/ambiguous-config.json"
+cat > "$ambiguous_config" <<'JSON'
+{"version":1,"entries":[
+  {"label":"Answer","text":"Answer selected","key":"TA"},
+  {"label":"Brief","text":"Brief selected","key":"TB"}
+]}
+JSON
+./target/debug/trievium --config "$ambiguous_config" >"$XDG_RUNTIME_DIR/ambiguous.log" 2>&1 &
+picker_pid=$!
+for _ in $(seq 1 100); do
+  if swaymsg -s "$sway_sock" -t get_tree | grep -q '"app_id": "trievium"'; then
+    break
+  fi
+  sleep 0.1
+done
+swaymsg -s "$sway_sock" '[app_id="trievium"] focus'
+sleep 0.2
+wtype t
+sleep 0.25
+if ! kill -0 "$picker_pid" 2>/dev/null; then
+  echo "Ambiguous prefix prematurely closed the picker" >&2
+  exit 1
+fi
+if [[ "$(wl-paste -n 2>/dev/null || true)" != "Unique prefix selected" ]]; then
+  echo "Ambiguous prefix prematurely copied an entry" >&2
+  exit 1
+fi
+wtype x
+sleep 0.1
+if [[ "$(wl-paste -n 2>/dev/null || true)" != "Unique prefix selected" ]]; then
+  echo "Invalid letter changed clipboard or triggered a selection" >&2
+  exit 1
+fi
+wtype b
+copied=""
+for _ in $(seq 1 70); do
+  copied=$(wl-paste -n 2>/dev/null || true)
+  if [[ "$copied" == "Brief selected" ]]; then
+    break
+  fi
+  sleep 0.1
+done
+if [[ "$copied" != "Brief selected" ]]; then
+  echo "Ambiguous prefix did not resolve after disambiguating letter" >&2
+  cat "$XDG_RUNTIME_DIR/ambiguous.log" >&2
+  exit 1
+fi
+wait_for_picker_exit
+echo "Wayland prefix E2E passed: unique, ambiguous, and ignored invalid letters."

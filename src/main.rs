@@ -215,7 +215,7 @@ impl Picker {
         self.next_keys = next.into_iter().collect();
     }
 
-    fn select(&mut self, index: usize, ctx: &egui::Context) {
+    fn select(&mut self, index: usize) {
         if self.diagnose_input {
             eprintln!(
                 "trievium diagnostics: shortcut {} selected; copying",
@@ -227,7 +227,11 @@ impl Picker {
                 if self.diagnose_input {
                     eprintln!("trievium diagnostics: copy successful; closing popup");
                 }
-                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                // A viewport close request left the popup alive on the
+                // target stack. Terminate only after wl-copy succeeds and
+                // the background clipboard owner has been established.
+                // The OS releases the session lock on process exit.
+                std::process::exit(0);
             }
             Err(error) => {
                 if self.diagnose_input {
@@ -242,17 +246,15 @@ impl Picker {
         }
     }
 
-    fn type_char(&mut self, ch: char, ctx: &egui::Context) -> bool {
+    fn type_char(&mut self, ch: char) {
         match self.selection.push(ch, &self.map) {
             trievium::input::SelectionOutcome::Selected(index) => {
                 self.error = None;
-                self.select(index, ctx);
-                true
+                self.select(index);
             }
             trievium::input::SelectionOutcome::Continue => {
                 self.refresh_choices();
                 self.error = None;
-                false
             }
             trievium::input::SelectionOutcome::Invalid => {
                 if self.diagnose_input {
@@ -260,7 +262,6 @@ impl Picker {
                 }
                 // Unassigned letters are harmless, not a failure.
                 self.error = None;
-                false
             }
         }
     }
@@ -268,7 +269,6 @@ impl Picker {
 
 impl eframe::App for Picker {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        let ctx = ui.ctx().clone();
         let (events, modifiers, focused) =
             ui.input(|input| (input.events.clone(), input.modifiers, input.focused));
         if self.diagnose_input {
@@ -277,10 +277,12 @@ impl eframe::App for Picker {
                 self.last_focus = Some(focused);
             }
             for event in &events {
-                eprintln!(
-                    "trievium diagnostics: {}",
-                    trievium::input::describe_event(event)
-                );
+                let description = trievium::input::describe_event(event);
+                // Ignore repaint/pointer noise. It previously flooded
+                // diagnostic output with thousands of low-value lines.
+                if description != "other_event" {
+                    eprintln!("trievium diagnostics: {description}");
+                }
             }
         }
         for action in self
@@ -291,20 +293,13 @@ impl eframe::App for Picker {
                 eprintln!("trievium diagnostics: routed action={action:?}");
             }
             match action {
-                InputAction::Close => {
-                    ctx.send_viewport_cmd(egui::ViewportCommand::Close);
-                    return;
-                }
+                InputAction::Close => std::process::exit(0),
                 InputAction::Backspace => {
                     self.selection.backspace();
                     self.refresh_choices();
                     self.error = None;
                 }
-                InputAction::Letter(ch) => {
-                    if self.type_char(ch, &ctx) {
-                        return;
-                    }
-                }
+                InputAction::Letter(ch) => self.type_char(ch),
                 InputAction::Ignore => {}
             }
         }
@@ -404,7 +399,7 @@ impl eframe::App for Picker {
                 }
             });
         if let Some(index) = clicked {
-            self.select(index, &ctx);
+            self.select(index);
         }
     }
 }

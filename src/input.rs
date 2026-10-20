@@ -169,7 +169,12 @@ impl Selection {
         let letter = ch.to_ascii_uppercase();
         self.prefix.push(letter);
         match map.lookup(&self.prefix) {
-            Lookup::Selected(index) => SelectionOutcome::Selected(index),
+            Lookup::Selected(index) => {
+                // Completed keys must not remain as prefixes if an action
+                // fails or a future caller reuses this state.
+                self.prefix.clear();
+                SelectionOutcome::Selected(index)
+            },
             Lookup::Continue => SelectionOutcome::Continue,
             Lookup::Invalid => {
                 self.prefix.pop();
@@ -360,6 +365,16 @@ mod tests {
         assert_eq!(picker.prefix(), "B");
         picker.backspace();
         assert_eq!(picker.prefix(), "");
+    }
+
+    #[test]
+    fn terminal_selection_cannot_poison_the_next_key() {
+        let map = Keymap::build(&[pinned("Greeting", "G"), pinned("Closing", "C")]).unwrap();
+        let mut selection = Selection::default();
+        assert_eq!(selection.push('G', &map), SelectionOutcome::Selected(0));
+        assert!(selection.prefix().is_empty());
+        assert_eq!(selection.push('C', &map), SelectionOutcome::Selected(1));
+        assert!(selection.prefix().is_empty());
     }
 
     #[test]

@@ -43,6 +43,8 @@ The picker attempts to obtain a session-local lock in `XDG_RUNTIME_DIR/trievium.
 
 ## Clipboard reliability
 
+A successful copy or Escape explicitly terminates this short-lived native picker because a viewport close request was observed to leave the popup alive during dogfooding. `wl-copy` has already completed its fork/handoff on success, so it owns the clipboard independently, while the kernel releases the advisory session lock on exit. The selection state also clears completed trie prefixes defensively.
+
 On Wayland, clipboard data is normally served by its owner process. Exiting an application immediately after claiming clipboard ownership can lose the data. `wl-copy` forks and serves requests in the background by default. Trievium writes the complete UTF-8 contents to its stdin, closes the pipe, waits for the invoking process and closes the picker **only after success**. Do not change this to `egui`'s ordinary copied-text output without validating clipboard persistence.
 
 Clipboard managers may record selected content. Users should not put passwords/secrets in plaintext config or treat this as a secure secret manager.

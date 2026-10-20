@@ -29,7 +29,9 @@ fn run() -> Result<()> {
             "pick" | "init" | "validate" | "config-path" | "doctor" => command = arg,
             "--diagnose-input" => diagnose_input = true,
             "--theme" | "--color-mode" => {
-                let mode = args.next().context("--theme requires system, light, or dark")?;
+                let mode = args
+                    .next()
+                    .context("--theme requires system, light, or dark")?;
                 appearance = mode.parse()?;
             }
             "--config" => {
@@ -287,11 +289,8 @@ impl eframe::App for Picker {
         // Paint an opaque surface in both modes. The original fixed dark
         // fill made egui's light theme unreadable.
         let theme = ui.ctx().theme();
-        ui.painter().rect_filled(
-            ui.max_rect(),
-            0.0,
-            Appearance::background(theme),
-        );
+        ui.painter()
+            .rect_filled(ui.max_rect(), 0.0, Appearance::background(theme));
         let focused = ui.input(|input| input.focused);
         if self.diagnose_input && self.last_focus != Some(focused) {
             eprintln!("trievium diagnostics: window focus={focused}");

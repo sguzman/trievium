@@ -101,6 +101,9 @@ mod tests {
             Appearance::background(Theme::Dark),
             Appearance::background(Theme::Light)
         );
-        assert_ne!(Appearance::error_color(Theme::Light), Appearance::error_color(Theme::Dark));
+        assert_ne!(
+            Appearance::error_color(Theme::Light),
+            Appearance::error_color(Theme::Dark)
+        );
     }
 }

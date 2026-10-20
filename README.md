@@ -28,7 +28,7 @@ bind = SUPER, P, exec, /absolute/path/to/trievium/target/release/trievium
 
 Replace the absolute path with your actual location. Choose a keybind that does not conflict with your existing binds.
 
-**Hyprland integration:** Trievium recognizes an active Hyprland session, waits briefly for its own window to map, then uses `hyprctl` to float, resize, center and focus **only its own process's window**. No compositor configuration edits or persistent rules are required. The integration runs once when opening, not continuously. On other compositors, Trievium relies on their default window-management behavior.
+**Hyprland integration:** Trievium recognizes an active Hyprland session, waits briefly for its own window to map, then uses the Hyprland Lua dispatcher API to float, resize, center and focus **only its own process's window** (required for Hyprland 0.55+ Lua configurations). No compositor configuration edits or persistent rules are required. The integration runs once when opening, not continuously. On other compositors, Trievium relies on their default window-management behavior.
 
 ## Preflight and compiled Linux builds
 

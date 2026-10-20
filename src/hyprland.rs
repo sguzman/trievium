@@ -67,53 +67,53 @@ fn valid_address(address: &str) -> bool {
         .is_some_and(|hex| !hex.is_empty() && hex.bytes().all(|byte| byte.is_ascii_hexdigit()))
 }
 
-fn dispatch(action: &str, selector: &str) -> Result<(), String> {
-    let status = Command::new("hyprctl")
-        .args(["dispatch", action, selector])
-        .status()
-        .map_err(|err| format!("hyprctl dispatch {action}: {err}"))?;
-    if status.success() {
+/// Hyprland 0.55+ Lua configurations do not accept the old
+/// `hyprctl dispatch setfloating address:...` syntax. The dispatch
+/// argument must be ONE Lua dispatcher expression (hl.dsp.*).
+///
+/// Do not use an activewindow selector: every action targets Trievium's
+/// verified window address, including centering and focus.
+fn popup_dispatchers(address: &str, width: i32, height: i32) -> Result<[String; 4], String> {
+    if !valid_address(address) {
+        return Err("refusing invalid Hyprland window address".into());
+    }
+    if width <= 0 || height <= 0 {
+        return Err("refusing nonpositive popup dimensions".into());
+    }
+    let selector = format!("address:{address}");
+    Ok([
+        format!(
+            "hl.dsp.window.float({{ window = \"{selector}\", action = \"enable\" }})"
+        ),
+        format!(
+            "hl.dsp.window.resize({{ window = \"{selector}\", x = {width}, y = {height} }})"
+        ),
+        format!("hl.dsp.window.center({{ window = \"{selector}\" }})"),
+        format!("hl.dsp.focus({{ window = \"{selector}\" }})"),
+    ])
+}
+
+fn dispatch_lua(expression: &str) -> Result<(), String> {
+    let output = Command::new("hyprctl")
+        .args(["dispatch", expression])
+        .output()
+        .map_err(|error| format!("starting hyprctl: {error}"))?;
+    if output.status.success() {
         Ok(())
     } else {
-        Err(format!("hyprctl dispatch {action} returned {status}"))
+        Err(format!(
+            "Hyprland rejected {expression}: {}{}",
+            String::from_utf8_lossy(&output.stdout).trim(),
+            String::from_utf8_lossy(&output.stderr).trim()
+        ))
     }
 }
 
 fn configure_our_window(address: &str, width: i32, height: i32) -> Result<(), String> {
-    if !valid_address(address) {
-        return Err("refusing invalid Hyprland window address".into());
-    }
-    let selector = format!("address:{address}");
-    dispatch("setfloating", &selector)?;
-    dispatch(
-        "resizewindowpixel",
-        &format!("exact {width} {height},{selector}"),
-    )?;
-    dispatch("focuswindow", &selector)?;
-
-    // The centering dispatcher addresses the *focused* window, not a
-    // selector. Read it back before centering so an unsuccessful focus
-    // command cannot reposition the terminal or any unrelated window.
-    if is_active_window(address) {
-        dispatch("centerwindow", "1")?;
+    for expression in popup_dispatchers(address, width, height)? {
+        dispatch_lua(&expression)?;
     }
     Ok(())
-}
-
-fn is_active_window(address: &str) -> bool {
-    let Ok(output) = Command::new("hyprctl")
-        .args(["-j", "activewindow"])
-        .output()
-    else {
-        return false;
-    };
-    if !output.status.success() {
-        return false;
-    }
-    serde_json::from_slice::<Value>(&output.stdout)
-        .ok()
-        .and_then(|value| value.get("address")?.as_str().map(str::to_owned))
-        .is_some_and(|active| active == address)
 }
 
 #[cfg(test)]
@@ -145,4 +145,58 @@ mod tests {
         assert_eq!(find_our_window(b"not json", 123), None);
         assert_eq!(find_our_window(br#"[{"pid":123}]"#, 123), None);
     }
+    #[test]
+    fn lua_dispatchers_are_explicit_and_target_only_our_window() {
+        let statements = popup_dispatchers("0xabc123", 560, 420).unwrap();
+        assert_eq!(
+            statements,
+            [
+                "hl.dsp.window.float({ window = \"address:0xabc123\", action = \"enable\" })",
+                "hl.dsp.window.resize({ window = \"address:0xabc123\", x = 560, y = 420 })",
+                "hl.dsp.window.center({ window = \"address:0xabc123\" })",
+                "hl.dsp.focus({ window = \"address:0xabc123\" })",
+            ]
+        );
+        assert!(popup_dispatchers("address:activewindow", 560, 420).is_err());
+        assert!(popup_dispatchers("0xabc123", 0, 420).is_err());
+    }
+
+    #[test]
+    fn lua_expressions_execute_with_dispatcher_object_shapes() {
+        // GitHub CI installs lua5.4. Outside CI, the test can run without Lua
+        // and will skip only this additional syntax/argument verification.
+        let interpreter = if Command::new("lua5.4").arg("-v").output().is_ok() {
+            "lua5.4"
+        } else {
+            return;
+        };
+        let prelude = r#"
+local function selected(t)
+    assert(type(t) == "table")
+    assert(t.window == "address:0xabc123")
+    return t
+end
+hl = {
+    dsp = {
+        window = {
+            float = function(t) assert(t.action == "enable"); return selected(t) end,
+            resize = function(t) assert(t.x == 560 and t.y == 420); return selected(t) end,
+            center = selected,
+        },
+        focus = selected,
+    },
+    dispatch = function(t) assert(type(t) == "table") end,
+}
+"#;
+        for expression in popup_dispatchers("0xabc123", 560, 420).unwrap() {
+            let script = format!("{prelude}\\nhl.dispatch({expression})");
+            let output = Command::new(interpreter).args(["-e", &script]).output().unwrap();
+            assert!(
+                output.status.success(),
+                "Lua rejected generated dispatcher {expression}: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+    }
+
 }

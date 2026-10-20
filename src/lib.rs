@@ -7,3 +7,4 @@ pub mod launch;
 pub mod manager;
 pub mod shortcut_cache;
 pub mod trie;
+pub mod typography;

@@ -165,6 +165,7 @@ fn run() -> Result<()> {
                 native,
                 Box::new(move |cc| {
                     appearance.configure(&cc.egui_ctx);
+                    trievium::typography::install(&cc.egui_ctx);
                     Ok(Box::new(picker))
                 }),
             )

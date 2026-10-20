@@ -153,6 +153,28 @@ fn confirm_popup_focus(address: &str) -> Result<(), String> {
     dispatch_lua(&focus)
 }
 
+/// Only floating windows may receive compositor-side resize commands:
+/// resizing a tiled surface can reflow the user's entire workspace.
+fn our_floating_window_address(pid: u32) -> Option<String> {
+    let output = Command::new("hyprctl")
+        .args(["-j", "clients"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let clients: Vec<Value> = serde_json::from_slice(&output.stdout).ok()?;
+    clients.into_iter().find_map(|client| {
+        let address = client.get("address")?.as_str()?;
+        let matches = client.get("pid")?.as_u64()? == u64::from(pid)
+            && client.get("class")?.as_str()? == APP_CLASS
+            && client.get("mapped")?.as_bool()?
+            && client.get("floating")?.as_bool()?
+            && valid_address(address);
+        matches.then(|| address.to_owned())
+    })
+}
+
 /// Resize an already mapped Trievium window when switching from the small
 /// picker to the editor and back. Only window geometry changes here: no
 /// focus commands, cursor movement, or global compositor configuration.
@@ -165,7 +187,7 @@ pub fn resize_own_popup(width: i32, height: i32) {
     }
     let pid = std::process::id();
     thread::spawn(move || {
-        if let Some(address) = our_window_address(pid) {
+        if let Some(address) = our_floating_window_address(pid) {
             let selector = format!("address:{address}");
             if let Err(error) = dispatch_lua(&format!(
                 "hl.dsp.window.resize({{ window = \"{selector}\", x = {width}, y = {height} }})"
@@ -184,6 +206,23 @@ pub fn resize_own_popup(width: i32, height: i32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn floating_resize_requires_floating_own_process_window() {
+        let clients = br#"[
+            {"pid":123,"class":"trievium","mapped":true,"floating":false,"address":"0x100"},
+            {"pid":123,"class":"kitty","mapped":true,"floating":true,"address":"0x200"},
+            {"pid":124,"class":"trievium","mapped":true,"floating":true,"address":"0x300"}
+        ]"#;
+        let parsed: Vec<Value> = serde_json::from_slice(clients).unwrap();
+        let matches = |client: &Value| {
+            client.get("pid").and_then(Value::as_u64) == Some(123)
+                && client.get("class").and_then(Value::as_str) == Some("trievium")
+                && client.get("mapped").and_then(Value::as_bool) == Some(true)
+                && client.get("floating").and_then(Value::as_bool) == Some(true)
+        };
+        assert!(parsed.iter().all(|client| !matches(client)));
+    }
 
     #[test]
     fn requires_our_pid_exact_app_class_and_mapped_state() {

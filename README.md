@@ -65,7 +65,7 @@ CI also produces a packaged Linux x86_64 binary from each successful run. Open t
 - `Esc` closes without copying; `Backspace` corrects a partial sequence.
 - A focused native egui shortcut input receives typing and Backspace, following the working OTPick and Passflick pattern. The prefix tree selects terminal sequences immediately without Enter; unmapped letters are harmless. No raw event router or cross-frame timer is needed.
 - Clicking a row or its key badge also copies and exits.
-- The popup sizes itself to the entry count (up to a maximum), shows remaining key choices, and virtualizes long lists for responsive scrolling.
+- The popup contains only its title, focused shortcut field, and selectable entries (plus an error if copying fails). No tutorials, prompts, counts, key-hint captions, or focus warnings are shown. It sizes to the entry count and virtualizes long lists.
 - A session-local advisory lock prevents repeated hotkey presses opening multiple windows; no existing process is terminated. If `XDG_RUNTIME_DIR` is absent, locking is skipped.
 - On Hyprland, the picker floats and verifies **sustained** active-window focus during the first three seconds after mapping, correcting an early focus handoff back to the launching terminal. The window has an explicit opaque background and is not mouse-passthrough. Startup focus correction is bounded; no permanent focus-stealing daemon runs.
 - A failed clipboard operation displays an error, clears the terminal sequence for retry, and **does not exit**.

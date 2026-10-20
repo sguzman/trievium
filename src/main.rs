@@ -92,8 +92,9 @@ fn run() -> Result<()> {
             if let Err(error) = shortcut_cache::save(&cache_path, &config.entries, &map) {
                 eprintln!("trievium: cannot save automatic key assignments: {error:#}");
             }
+            // Only a title/input row and the actual selectable entries.
             let window_height =
-                (145.0 + config.entries.len().min(9) as f32 * 39.0).clamp(270.0, 510.0);
+                (56.0 + config.entries.len().min(9) as f32 * 39.0).clamp(175.0, 420.0);
             // The key order and matching list change only on prefix edits,
             // never on redraw. Keep the hot UI path proportional to visible rows.
             let mut ordered: Vec<usize> = (0..config.entries.len()).collect();
@@ -105,7 +106,6 @@ fn run() -> Result<()> {
                 error: None,
                 ordered,
                 visible: Vec::new(),
-                next_keys: String::new(),
                 input_has_focus: None,
                 diagnose_input,
                 last_focus: None,
@@ -124,7 +124,7 @@ fn run() -> Result<()> {
                     .with_title("Trievium")
                     .with_app_id("trievium")
                     .with_inner_size([560.0, window_height])
-                    .with_min_inner_size([400.0, 250.0])
+                    .with_min_inner_size([400.0, 160.0])
                     .with_decorations(false)
                     .with_resizable(false)
                     .with_transparent(false)
@@ -205,7 +205,6 @@ struct Picker {
     error: Option<String>,
     ordered: Vec<usize>,
     visible: Vec<usize>,
-    next_keys: String,
     input_has_focus: Option<bool>,
     diagnose_input: bool,
     last_focus: Option<bool>,
@@ -220,14 +219,6 @@ impl Picker {
             .copied()
             .filter(|&index| self.map.key(index).starts_with(prefix))
             .collect();
-        let mut next: Vec<char> = self
-            .visible
-            .iter()
-            .filter_map(|&index| self.map.key(index).chars().nth(prefix.len()))
-            .collect();
-        next.sort_unstable();
-        next.dedup();
-        self.next_keys = next.into_iter().collect();
     }
 
     fn select(&mut self, index: usize) {
@@ -300,22 +291,11 @@ impl eframe::App for Picker {
             std::process::exit(0);
         }
 
-        ui.add_space(10.0);
-        if self.diagnose_input {
-            ui.label(
-                egui::RichText::new("Input diagnostic mode · see terminal")
-                    .small()
-                    .weak(),
-            );
-        }
         let field = ui
             .horizontal(|ui| {
                 ui.heading("Trievium");
-                ui.separator();
-                ui.label(egui::RichText::new("type shortcut · Esc closes").weak());
                 ui.add(
                     egui::TextEdit::singleline(&mut self.typed)
-                        .hint_text("shortcut")
                         .desired_width(110.0)
                         .char_limit(4),
                 )
@@ -334,53 +314,12 @@ impl eframe::App for Picker {
         if field.changed() {
             self.accept_typed();
         }
-        ui.add_space(5.0);
-        if !ui.input(|input| input.focused) {
-            ui.colored_label(
-                Appearance::warning_color(theme),
-                "Waiting for keyboard focus from the compositor...",
-            );
-        }
-        let choices = self
-            .next_keys
-            .chars()
-            .map(|ch| ch.to_string())
-            .collect::<Vec<_>>()
-            .join("  ");
-        let prompt = if self.typed.is_empty() {
-            format!("Press one of: {choices}")
-        } else {
-            format!("Sequence: {}   Next: {choices}", self.typed.as_str())
-        };
-        ui.label(egui::RichText::new(prompt).size(17.0).strong());
+        // Keep the normal picker entirely free of instructions and status
+        // chatter. Only actionable clipboard failures warrant an extra line.
         if let Some(error) = &self.error {
             ui.colored_label(Appearance::error_color(theme), error);
-        } else {
-            ui.label(
-                egui::RichText::new("A complete sequence copies immediately and closes.")
-                    .small()
-                    .weak(),
-            );
         }
         ui.separator();
-
-        if self.typed.is_empty() {
-            ui.label(
-                egui::RichText::new(format!("{} entries", self.visible.len()))
-                    .small()
-                    .weak(),
-            );
-        } else if !self.next_keys.is_empty() {
-            ui.label(
-                egui::RichText::new(format!(
-                    "{} matches · next keys: {}",
-                    self.visible.len(),
-                    self.next_keys
-                ))
-                .small()
-                .weak(),
-            );
-        }
 
         // Virtualize row painting, and rebuild the match list only when the
         // typed prefix changes rather than re-sorting on every redraw.

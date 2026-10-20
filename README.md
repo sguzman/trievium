@@ -51,7 +51,7 @@ CI also produces a packaged Linux x86_64 binary from each successful run. Open t
 - Clicking a row or its key badge also copies and exits.
 - The popup sizes itself to the entry count (up to a maximum), shows remaining key choices, and virtualizes long lists for responsive scrolling.
 - A session-local advisory lock prevents repeated hotkey presses opening multiple windows; no existing process is terminated. If `XDG_RUNTIME_DIR` is absent, locking is skipped.
-- On Hyprland, the picker floats, requests focus and verifies it against the active-window address, retrying briefly at startup if necessary. An unfocused popup displays a visible warning instead of silently ignoring your keystrokes.
+- On Hyprland, the picker floats and verifies **sustained** active-window focus during the first three seconds after mapping, correcting an early focus handoff back to the launching terminal. The window has an explicit opaque background and is not mouse-passthrough. Startup focus correction is bounded; no permanent focus-stealing daemon runs.
 - A failed clipboard operation displays an error, clears the terminal sequence for retry, and **does not exit**.
 - A successful selection or Esc terminates the one-shot picker process, instead of depending on a viewport-close request that left the window alive. Completed selections also clear their key prefix defensively.
 - `wl-copy` runs without `--foreground`, leaving clipboard ownership alive after the UI exits. Paste normally into the previous application.

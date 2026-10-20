@@ -135,25 +135,32 @@ fn is_active_window(address: &str) -> bool {
     output.status.success() && active_window_address(&output.stdout).as_deref() == Some(address)
 }
 
+/// Compositor mapping has a settling period. Previously we returned
+/// after the *first* observed focus success, even if focus reverted to the
+/// launching terminal milliseconds later. Watch a short, bounded interval
+/// after mapping, correcting only our own window's focus. This is NOT a
+/// perpetual focus-stealing thread.
 fn confirm_popup_focus(address: &str) -> Result<(), String> {
+    if !valid_address(address) {
+        return Err("invalid popup address".into());
+    }
     let focus = format!("hl.dsp.focus({{ window = \"address:{address}\" }})");
-    for attempt in 0..12 {
+    let mut observed_focus = false;
+    for _ in 0..24 {
         if is_active_window(address) {
-            return Ok(());
-        }
-        // Only run during startup. We do not install a permanent focus
-        // watcher that could interfere with the user's other applications.
-        if attempt > 0 {
+            observed_focus = true;
+        } else {
             dispatch_lua(&focus)?;
         }
-        thread::sleep(Duration::from_millis(75));
+        thread::sleep(Duration::from_millis(125));
     }
     if is_active_window(address) {
-        return Ok(());
+        Ok(())
+    } else if observed_focus {
+        Err("Trievium window lost focus during startup".into())
+    } else {
+        Err("Hyprland never focused Trievium during startup".into())
     }
-    Err(format!(
-        "Hyprland did not focus Trievium window {address} after startup"
-    ))
 }
 
 #[cfg(test)]

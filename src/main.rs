@@ -117,7 +117,11 @@ fn run() -> Result<()> {
                     .with_app_id("trievium")
                     .with_inner_size([560.0, window_height])
                     .with_min_inner_size([400.0, 250.0])
-                    .with_decorations(false),
+                    .with_decorations(false)
+                    .with_resizable(false)
+                    .with_transparent(false)
+                    .with_mouse_passthrough(false)
+                    .with_always_on_top(),
                 ..Default::default()
             };
             // Hyprland otherwise places a normal Wayland toplevel in the
@@ -271,6 +275,13 @@ impl Picker {
 
 impl eframe::App for Picker {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        // Trievium must be a fully painted interactive window rather than
+        // a translucent-looking overlay of the launching terminal.
+        ui.painter().rect_filled(
+            ui.max_rect(),
+            0.0,
+            egui::Color32::from_rgb(20, 24, 30),
+        );
         let focused = ui.input(|input| input.focused);
         if self.diagnose_input && self.last_focus != Some(focused) {
             eprintln!("trievium diagnostics: window focus={focused}");

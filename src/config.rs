@@ -18,6 +18,8 @@ pub struct Entry {
     pub text: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub key: Option<String>,
+    // Legacy schema-v1 field: retained to load existing configurations.
+    // It no longer affects shortcut assignment or the editor.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub priority: i32,
 }

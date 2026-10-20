@@ -14,7 +14,6 @@ struct EntryForm {
     label: String,
     text: String,
     key: String,
-    priority: i32,
 }
 impl EntryForm {
     fn from_entry(entry: &Entry) -> Self {
@@ -26,7 +25,6 @@ impl EntryForm {
                 .as_deref()
                 .unwrap_or_default()
                 .to_ascii_lowercase(),
-            priority: entry.priority,
         }
     }
     fn to_entry(&self) -> Entry {
@@ -34,7 +32,8 @@ impl EntryForm {
             label: self.label.trim().to_owned(),
             text: self.text.clone(),
             key: (!self.key.trim().is_empty()).then(|| self.key.trim().to_ascii_uppercase()),
-            priority: self.priority,
+            // Legacy field accepted in existing JSON, no longer ranked.
+            priority: 0,
         }
     }
 }
@@ -269,7 +268,7 @@ impl Manager {
                 for (index, entry) in self.config.entries.iter().enumerate() {
                     let label = format!(
                         "{}    {}",
-                        self.map.key(index).to_ascii_lowercase(),
+                        self.map.selection_key(index).to_ascii_lowercase(),
                         entry.label
                     );
                     if ui
@@ -341,13 +340,7 @@ impl Manager {
                     );
                 });
             });
-            ui.add_space(18.0);
-            ui.vertical(|ui| {
-                ui.label("Automatic priority");
-                Self::input_frame(ui, |ui| {
-                    ui.add(egui::DragValue::new(&mut self.form.priority));
-                });
-            });
+
         });
     }
 }
@@ -389,7 +382,6 @@ mod tests {
             label: "Address".into(),
             text: "123 Example St".into(),
             key: "a".into(),
-            priority: 80,
         };
         mgr.save_form().unwrap();
         assert_eq!(
@@ -432,7 +424,6 @@ mod tests {
             label: "Quick reply".into(),
             text: "Thanks!".into(),
             key: "q".into(),
-            priority: 0,
         };
         mgr.finish().unwrap();
         let saved = Config::load(&path).unwrap();
@@ -464,7 +455,6 @@ mod tests {
             label: "Conflicting".into(),
             text: "Text".into(),
             key: "GA".into(),
-            priority: 0,
         };
         assert!(mgr.save_form().is_err());
         assert_eq!(fs::read(&path).unwrap(), initial);
@@ -479,7 +469,6 @@ mod tests {
             label: "New".into(),
             text: "Text".into(),
             key: String::new(),
-            priority: 0,
         };
         fs::write(&path, b"external edits").unwrap();
         assert!(mgr.save_form().is_err());

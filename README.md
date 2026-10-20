@@ -32,7 +32,7 @@ Replace the absolute path with your actual location. Choose a keybind that does 
 
 ## Manage entries in Trievium
 
-Click **Edit** in the picker, or launch `trievium manage` to open the larger management view immediately. The editor has a padded, scrollable, responsive layout; on Hyprland, Trievium resizes its own floating window when changing between picker and editor. This is the normal way to create and maintain your selection library. The app provides **New**, **Save**, **Delete** (with confirmation), **Discard**, **Done**, and **Close**. **Done** validates and saves the current entry before returning to the picker. An invalid entry stays open with an error instead of losing the text. **Close** or **Escape** exits without saving the current form; **Discard** explicitly resets it. Previously saved entries remain intact. Each entry has a name, multiline text to copy, optional pinned 1–4 letter shortcut and automatic priority. The list displays shortcuts in lowercase beside every entry (matching how you type). Keys are normalized internally; you do not need Shift. A saved change is available as soon as you return to the picker.
+Click **Edit** in the picker, or launch `trievium manage` to open the larger management view immediately. The editor has a padded, scrollable, responsive layout; on Hyprland, Trievium resizes its own floating window when changing between picker and editor. This is the normal way to create and maintain your selection library. The app provides **New**, **Save**, **Delete** (with confirmation), **Discard**, **Done**, and **Close**. **Done** validates and saves the current entry before returning to the picker. An invalid entry stays open with an error instead of losing the text. **Close** or **Escape** exits without saving the current form; **Discard** explicitly resets it. Previously saved entries remain intact. Each entry has a name, multiline text to copy, and an optional pinned 1–4 letter shortcut. Numeric automatic priority has been removed; selection is based on the shortest unique prefix. The list displays shortcuts in lowercase beside every entry (matching how you type). Keys are normalized internally; you do not need Shift. A saved change is available as soon as you return to the picker.
 
 The editor uses visible outlined fields for name, multiline copied text, pinned shortcut, and priority. The picker has 18 px side padding and compact fixed-height rows, instead of clipping entries in an undersized window. The app saves the same local `items.json` file atomically and validates duplicate labels and conflicting prefixes before writing. Errors leave your previous configuration intact. If another program edited `items.json` while Trievium was open, the editor refuses to overwrite it. You can remove every entry and start with an empty library. On a first launch with no configuration, Trievium starts with an empty library rather than requiring `init`.
 
@@ -69,9 +69,9 @@ CI also produces a packaged Linux x86_64 binary from each successful run. Open t
 ## Behavior
 
 - `G` could immediately copy your Greeting and close.
-- `T` could reveal several choices, with `TA` and `TB` as terminal sequences.
+- If `ta` and `tb` exist, `t` is ambiguous, so Trievium waits. `ta` or `tb` chooses immediately. If only `ta` exists under `t`, pressing `t` alone selects it.
 - `Esc` closes without copying; `Backspace` corrects a partial sequence.
-- A focused native egui shortcut input receives typing and Backspace, following the working OTPick and Passflick pattern. The prefix tree selects terminal sequences immediately without Enter; unmapped letters are harmless. No raw event router or cross-frame timer is needed.
+- A focused native egui shortcut input receives typing and Backspace. The prefix tree selects immediately at the first unique match, waits while several entries match, and ignores letters matching none; no Enter required. No raw event router or cross-frame timer is needed.
 - Clicking a row or its key badge also copies and exits.
 - The popup contains only its title, focused shortcut field, and selectable entries (plus an error if copying fails). No tutorials, prompts, counts, key-hint captions, or focus warnings are shown. It sizes to the entry count and virtualizes long lists.
 - A session-local advisory lock prevents repeated hotkey presses opening multiple windows; no existing process is terminated. If `XDG_RUNTIME_DIR` is absent, locking is skipped.
@@ -81,19 +81,19 @@ CI also produces a packaged Linux x86_64 binary from each successful run. Open t
 - `wl-copy` runs without `--foreground`, leaving clipboard ownership alive after the UI exits. Paste normally into the previous application.
 - Headless CI verifies Unicode and multiline bytes through the same subprocess boundary using a local file writer; it does not simulate a real Wayland clipboard.
 
-The JSON file has `version: 1` and an `entries` array. Each entry has `label` and `text`; optional `key` pins a fixed sequence; optional integer `priority` makes automatic assignment earlier for more important entries. Keys use 1-4 ASCII letters. An assigned key cannot prefix any other key. Invalid configurations (including pinned-key collisions) are rejected before launching. There is no automatic paste, command execution, network access, or telemetry.
+The JSON file has `version: 1` and an `entries` array. Each entry has `label` and `text`; optional `key` reserves a prefix-free shortcut. The legacy `priority` field remains readable in existing JSON but is ignored. Keys use 1-4 ASCII letters. An assigned key cannot prefix any other key. Invalid configurations (including pinned-key collisions) are rejected before launching. There is no automatic paste, command execution, network access, or telemetry.
 
 ```json
 {
   "version": 1,
   "entries": [
-    {"label": "Email response", "text": "Thanks for your message.", "key": "E", "priority": 100},
-    {"label": "Detailed response", "text": "Here are the details...", "priority": 50}
+    {"label": "Email response", "text": "Thanks for your message.", "key": "E"},
+    {"label": "Detailed response", "text": "Here are the details..."}
   ]
 }
 ```
 
-The shortcut generator tries mnemonic letters first, reserving longer-key capacity for all entries. **Automatic key assignments are remembered between launches**, including when new entries are added. This best-effort cache lives under `$XDG_STATE_HOME/trievium/` (normally `~/.local/state/trievium/`), with a separate cache per configuration file. It stores **labels and keys only**, never clipboard text. Pinned `key` values always take precedence. If every existing single-letter key is occupied, one or more automatic keys must change to make room; pinned keys never move. `trievium validate` prints assignments without writing the cache, and opening the picker saves them. Renaming an entry changes its identity; labels must be unique.
+The shortcut generator tries mnemonic letters first, reserving longer-key capacity for all entries. Existing pinned and remembered codes stay stable where possible, with no numeric priority ranking. Badges display the shortest unique prefix to type, even when a reserved code is longer. **Automatic key assignments are remembered between launches**, including when new entries are added. This best-effort cache lives under `$XDG_STATE_HOME/trievium/` (normally `~/.local/state/trievium/`), with a separate cache per configuration file. It stores **labels and keys only**, never clipboard text. Pinned `key` values always take precedence. If every existing single-letter key is occupied, one or more automatic keys must change to make room; pinned keys never move. `trievium validate` prints assignments without writing the cache, and opening the picker saves them. Renaming an entry changes its identity; labels must be unique.
 
 ## Development
 

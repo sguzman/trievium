@@ -13,6 +13,8 @@ struct Node {
     // Occupied capacity at the maximum shortcut depth. This lets the
     // candidate search skip entire saturated subtrees in constant time.
     used_slots: usize,
+    entries_below: usize,
+    sole_entry: Option<usize>,
     children: BTreeMap<char, Node>,
 }
 
@@ -37,10 +39,14 @@ impl Node {
         }
         let cost = capacity(MAX_DEPTH - code.len());
         self.used_slots += cost;
+        self.entries_below += 1;
+        self.sole_entry = (self.entries_below == 1).then_some(index);
         let mut node = self;
         for c in code.chars() {
             node = node.children.entry(c).or_default();
             node.used_slots += cost;
+            node.entries_below += 1;
+            node.sole_entry = (node.entries_below == 1).then_some(index);
         }
         node.terminal = Some(index);
         Ok(())
@@ -100,11 +106,12 @@ impl Keymap {
             }
         }
 
+        // No ranking or legacy priority scores. Preserve pinned and cached
+        // codes and assign any remaining branches deterministically by label.
         auto.sort_by(|&a, &b| {
-            entries[b]
-                .priority
-                .cmp(&entries[a].priority)
-                .then_with(|| entries[a].label.cmp(&entries[b].label))
+            entries[a]
+                .label
+                .cmp(&entries[b].label)
                 .then_with(|| a.cmp(&b))
         });
 
@@ -203,13 +210,29 @@ impl Keymap {
     }
 
     pub fn lookup(&self, prefix: &str) -> Lookup {
+        if prefix.is_empty() {
+            return Lookup::Continue;
+        }
         match self.root.get(prefix) {
             None => Lookup::Invalid,
-            Some(node) => match node.terminal {
-                Some(index) => Lookup::Selected(index),
-                None => Lookup::Continue,
+            Some(node) => match node.entries_below {
+                0 => Lookup::Invalid,
+                1 => Lookup::Selected(node.sole_entry.expect("unique trie branch")),
+                _ => Lookup::Continue,
             },
         }
+    }
+
+    /// The shortest selecting prefix may be shorter than the reserved key.
+    /// The UI must show what users actually need to type.
+    pub fn selection_key(&self, index: usize) -> &str {
+        let code = self.key(index);
+        for n in 1..=code.len() {
+            if self.lookup(&code[..n]) == Lookup::Selected(index) {
+                return &code[..n];
+            }
+        }
+        code
     }
 
     pub fn matching<'a>(&'a self, prefix: &'a str) -> impl Iterator<Item = usize> + 'a {
@@ -363,6 +386,46 @@ mod tests {
     }
 
     #[test]
+    fn unique_branch_selects_without_finishing_reserved_key() {
+        let map = Keymap::build(&[
+            entry("Technical", Some("TA"), 0),
+            entry("Closing", Some("C"), 0),
+        ]).unwrap();
+        assert_eq!(map.lookup(""), Lookup::Continue);
+        assert_eq!(map.lookup("T"), Lookup::Selected(0));
+        assert_eq!(map.lookup("TA"), Lookup::Selected(0));
+        assert_eq!(map.selection_key(0), "T");
+        assert_eq!(map.selection_key(1), "C");
+        assert_eq!(map.lookup("F"), Lookup::Invalid);
+    }
+
+    #[test]
+    fn ambiguous_branch_waits_for_disambiguation() {
+        let map = Keymap::build(&[
+            entry("Technical Brief", Some("TB"), 0),
+            entry("Technical Answer", Some("TA"), 0),
+            entry("Goodbye", Some("G"), 0),
+        ]).unwrap();
+        assert_eq!(map.lookup("T"), Lookup::Continue);
+        assert_eq!(map.lookup("TB"), Lookup::Selected(0));
+        assert_eq!(map.lookup("TA"), Lookup::Selected(1));
+        assert_eq!(map.selection_key(0), "TB");
+        assert_eq!(map.selection_key(1), "TA");
+        assert_eq!(map.lookup("TX"), Lookup::Invalid);
+    }
+
+    #[test]
+    fn legacy_priority_does_not_change_auto_assignments() {
+        let a = vec![entry("Address", None, -1000), entry("Email", None, 1000)];
+        let b = vec![entry("Address", None, 1000), entry("Email", None, -1000)];
+        let first = Keymap::build(&a).unwrap();
+        let second = Keymap::build(&b).unwrap();
+        for i in 0..a.len() {
+            assert_eq!(first.key(i), second.key(i));
+        }
+    }
+
+    #[test]
     fn handles_pinned_nested_alphabet_and_available_space() {
         let items = vec![
             entry("A", Some("AB"), 0),
@@ -371,7 +434,7 @@ mod tests {
             entry("D", None, 1),
         ];
         let map = Keymap::build(&items).unwrap();
-        assert_eq!(map.lookup("A"), Lookup::Continue);
+        assert_eq!(map.lookup("A"), Lookup::Selected(0));
         assert_eq!(map.lookup("AB"), Lookup::Selected(0));
         assert_eq!(map.lookup("Z"), Lookup::Selected(1));
         assert_eq!(map.lookup(map.key(2)), Lookup::Selected(2));

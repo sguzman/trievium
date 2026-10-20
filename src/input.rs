@@ -53,6 +53,22 @@ mod tests {
     }
 
     #[test]
+    fn one_unique_match_finishes_on_first_letter() {
+        let map = Keymap::build(&[entry("Greeting", "GR"), entry("Closing", "C")]).unwrap();
+        assert_eq!(resolve_typed("g", &map), TypedOutcome::Selected(0));
+        assert_eq!(resolve_typed("xg", &map), TypedOutcome::Selected(0));
+        assert_eq!(resolve_typed("x", &map), TypedOutcome::Continue(String::new()));
+    }
+
+    #[test]
+    fn invalid_letters_do_not_register_in_ambiguous_branch() {
+        let map = Keymap::build(&[entry("Brief", "BA"), entry("Checklist", "BC")]).unwrap();
+        assert_eq!(resolve_typed("b", &map), TypedOutcome::Continue("B".into()));
+        assert_eq!(resolve_typed("bx", &map), TypedOutcome::Continue("B".into()));
+        assert_eq!(resolve_typed("bxc", &map), TypedOutcome::Selected(1));
+    }
+
+    #[test]
     fn multi_key_prefixes_and_backspace_work() {
         let map = Keymap::build(&[entry("Brief", "BA"), entry("Checklist", "BC")]).unwrap();
         assert_eq!(resolve_typed("b", &map), TypedOutcome::Continue("B".into()));

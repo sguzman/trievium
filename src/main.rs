@@ -75,7 +75,7 @@ fn run() -> Result<()> {
             let previous = shortcut_cache::load(&cache_path);
             let map = Keymap::build_with_previous(&config.entries, &previous)?;
             for (index, entry) in config.entries.iter().enumerate() {
-                println!("{:<5} {}", map.key(index).to_ascii_lowercase(), entry.label);
+                println!("{:<5} {}", map.selection_key(index).to_ascii_lowercase(), entry.label);
             }
         }
         _ => {
@@ -444,7 +444,7 @@ impl eframe::App for Picker {
                                 .inner_margin(egui::Margin::symmetric(0, 4))
                                 .show(ui, |ui| {
                                     ui.horizontal(|ui| {
-                                        let sequence = self.map.key(index).to_ascii_lowercase();
+                                        let sequence = self.map.selection_key(index).to_ascii_lowercase();
                                         if ui
                                             .add_sized(
                                                 [54.0, 24.0],

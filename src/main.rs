@@ -5,7 +5,7 @@ use std::process::Command;
 use trievium::clipboard::copy_text;
 use trievium::config::{self, Config};
 use trievium::hyprland;
-use trievium::input::{InputAction, KeyboardInput, Selection};
+use trievium::input::{TypedOutcome, resolve_typed};
 use trievium::launch::{self, Instance};
 use trievium::shortcut_cache;
 use trievium::trie::Keymap;
@@ -85,7 +85,7 @@ fn run() -> Result<()> {
                 eprintln!("trievium: cannot save automatic key assignments: {error:#}");
             }
             let window_height =
-                (125.0 + config.entries.len().min(9) as f32 * 39.0).clamp(245.0, 490.0);
+                (145.0 + config.entries.len().min(9) as f32 * 39.0).clamp(270.0, 510.0);
             // The key order and matching list change only on prefix edits,
             // never on redraw. Keep the hot UI path proportional to visible rows.
             let mut ordered: Vec<usize> = (0..config.entries.len()).collect();
@@ -93,12 +93,12 @@ fn run() -> Result<()> {
             let mut picker = Picker {
                 config,
                 map,
-                selection: Selection::default(),
+                typed: String::new(),
                 error: None,
                 ordered,
                 visible: Vec::new(),
                 next_keys: String::new(),
-                keyboard: KeyboardInput::default(),
+                input_has_focus: None,
                 diagnose_input,
                 last_focus: None,
             };
@@ -186,19 +186,19 @@ fn doctor(path: &Path) -> Result<()> {
 struct Picker {
     config: Config,
     map: Keymap,
-    selection: Selection,
+    typed: String,
     error: Option<String>,
     ordered: Vec<usize>,
     visible: Vec<usize>,
     next_keys: String,
-    keyboard: KeyboardInput,
+    input_has_focus: Option<bool>,
     diagnose_input: bool,
     last_focus: Option<bool>,
 }
 
 impl Picker {
     fn refresh_choices(&mut self) {
-        let prefix = self.selection.prefix();
+        let prefix = &self.typed;
         self.visible = self
             .ordered
             .iter()
@@ -237,7 +237,7 @@ impl Picker {
                 if self.diagnose_input {
                     eprintln!("trievium diagnostics: clipboard error: {error}");
                 }
-                self.selection.clear();
+                self.typed.clear();
                 self.refresh_choices();
                 self.error = Some(format!(
                     "Clipboard failed: {error}. Retry a shortcut or click an entry."
@@ -246,21 +246,20 @@ impl Picker {
         }
     }
 
-    fn type_char(&mut self, ch: char) {
-        match self.selection.push(ch, &self.map) {
-            trievium::input::SelectionOutcome::Selected(index) => {
-                self.error = None;
+    fn accept_typed(&mut self) {
+        match resolve_typed(&self.typed, &self.map) {
+            TypedOutcome::Selected(index) => {
+                if self.diagnose_input {
+                    eprintln!("trievium diagnostics: shortcut {} selected", self.map.key(index));
+                }
                 self.select(index);
             }
-            trievium::input::SelectionOutcome::Continue => {
-                self.refresh_choices();
-                self.error = None;
-            }
-            trievium::input::SelectionOutcome::Invalid => {
+            TypedOutcome::Continue(prefix) => {
                 if self.diagnose_input {
-                    eprintln!("trievium diagnostics: shortcut letter {ch} has no match");
+                    eprintln!("trievium diagnostics: {} prefix letters", prefix.len());
                 }
-                // Unassigned letters are harmless, not a failure.
+                self.typed = prefix;
+                self.refresh_choices();
                 self.error = None;
             }
         }
@@ -269,39 +268,13 @@ impl Picker {
 
 impl eframe::App for Picker {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        let (events, modifiers, focused) =
-            ui.input(|input| (input.events.clone(), input.modifiers, input.focused));
-        if self.diagnose_input {
-            if self.last_focus != Some(focused) {
-                eprintln!("trievium diagnostics: egui focus={focused}");
-                self.last_focus = Some(focused);
-            }
-            for event in &events {
-                let description = trievium::input::describe_event(event);
-                // Ignore repaint/pointer noise. It previously flooded
-                // diagnostic output with thousands of low-value lines.
-                if description != "other_event" {
-                    eprintln!("trievium diagnostics: {description}");
-                }
-            }
+        let focused = ui.input(|input| input.focused);
+        if self.diagnose_input && self.last_focus != Some(focused) {
+            eprintln!("trievium diagnostics: window focus={focused}");
+            self.last_focus = Some(focused);
         }
-        for action in self
-            .keyboard
-            .actions(&events, modifiers, std::time::Instant::now())
-        {
-            if self.diagnose_input {
-                eprintln!("trievium diagnostics: routed action={action:?}");
-            }
-            match action {
-                InputAction::Close => std::process::exit(0),
-                InputAction::Backspace => {
-                    self.selection.backspace();
-                    self.refresh_choices();
-                    self.error = None;
-                }
-                InputAction::Letter(ch) => self.type_char(ch),
-                InputAction::Ignore => {}
-            }
+        if ui.input(|input| input.key_pressed(egui::Key::Escape)) {
+            std::process::exit(0);
         }
 
         ui.add_space(10.0);
@@ -312,11 +285,29 @@ impl eframe::App for Picker {
                     .weak(),
             );
         }
-        ui.horizontal(|ui| {
-            ui.heading("Trievium");
-            ui.separator();
-            ui.label(egui::RichText::new("type to select · Esc closes").weak());
-        });
+        let field = ui
+            .horizontal(|ui| {
+                ui.heading("Trievium");
+                ui.separator();
+                ui.label(egui::RichText::new("type shortcut · Esc closes").weak());
+                ui.add(
+                    egui::TextEdit::singleline(&mut self.typed)
+                        .hint_text("shortcut")
+                        .desired_width(110.0)
+                        .char_limit(4),
+                )
+            })
+            .inner;
+        if !field.has_focus() {
+            field.request_focus();
+        }
+        if self.diagnose_input && self.input_has_focus != Some(field.has_focus()) {
+            eprintln!("trievium diagnostics: shortcut field focus={}", field.has_focus());
+            self.input_has_focus = Some(field.has_focus());
+        }
+        if field.changed() {
+            self.accept_typed();
+        }
         ui.add_space(5.0);
         if !ui.input(|input| input.focused) {
             ui.colored_label(
@@ -330,10 +321,10 @@ impl eframe::App for Picker {
             .map(|ch| ch.to_string())
             .collect::<Vec<_>>()
             .join("  ");
-        let prompt = if self.selection.prefix().is_empty() {
+        let prompt = if self.typed.as_str().is_empty() {
             format!("Press one of: {choices}")
         } else {
-            format!("Sequence: {}   Next: {choices}", self.selection.prefix())
+            format!("Sequence: {}   Next: {choices}", self.typed.as_str())
         };
         ui.label(egui::RichText::new(prompt).size(17.0).strong());
         if let Some(error) = &self.error {
@@ -347,7 +338,7 @@ impl eframe::App for Picker {
         }
         ui.separator();
 
-        if self.selection.prefix().is_empty() {
+        if self.typed.as_str().is_empty() {
             ui.label(
                 egui::RichText::new(format!("{} entries", self.visible.len()))
                     .small()

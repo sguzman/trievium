@@ -1,389 +1,91 @@
-//! Keyboard-only input handling, isolated from native-window side effects.
-//!
-//! Selection accepts logical A-Z key presses, not arbitrary text insertion.
-//! This deliberately ignores key-repeat and modified hotkeys. Shift is fine.
+//! Shortcut text reducer. A focused native egui TextEdit handles
+//! keyboard focus, editing, Backspace, and event delivery.
 use crate::trie::{Keymap, Lookup};
-use eframe::egui::{Event, Key};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum InputAction {
-    Letter(char),
-    Backspace,
-    Close,
-    Ignore,
-}
-
-fn letter_for_key(key: Key) -> Option<char> {
-    match key {
-        Key::A => Some('A'),
-        Key::B => Some('B'),
-        Key::C => Some('C'),
-        Key::D => Some('D'),
-        Key::E => Some('E'),
-        Key::F => Some('F'),
-        Key::G => Some('G'),
-        Key::H => Some('H'),
-        Key::I => Some('I'),
-        Key::J => Some('J'),
-        Key::K => Some('K'),
-        Key::L => Some('L'),
-        Key::M => Some('M'),
-        Key::N => Some('N'),
-        Key::O => Some('O'),
-        Key::P => Some('P'),
-        Key::Q => Some('Q'),
-        Key::R => Some('R'),
-        Key::S => Some('S'),
-        Key::T => Some('T'),
-        Key::U => Some('U'),
-        Key::V => Some('V'),
-        Key::W => Some('W'),
-        Key::X => Some('X'),
-        Key::Y => Some('Y'),
-        Key::Z => Some('Z'),
-        _ => None,
-    }
-}
-fn modified(m: eframe::egui::Modifiers) -> bool {
-    m.command || m.ctrl || m.alt || m.mac_cmd
-}
-pub fn classify_key(event: &Event) -> InputAction {
-    let Event::Key {
-        key,
-        pressed: true,
-        repeat: false,
-        modifiers,
-        ..
-    } = event
-    else {
-        return InputAction::Ignore;
-    };
-    if modified(*modifiers) {
-        return InputAction::Ignore;
-    }
-    match key {
-        Key::Escape => InputAction::Close,
-        Key::Backspace => InputAction::Backspace,
-        _ => letter_for_key(*key).map_or(InputAction::Ignore, InputAction::Letter),
-    }
-}
-
-/// Prefer native key-downs, without permanently disabling the text fallback.
-/// Deduplicate Text events from the same physical press across adjacent frames.
-#[derive(Default)]
-pub struct KeyboardInput {
-    recent_native: Vec<(char, std::time::Instant)>,
-}
-impl KeyboardInput {
-    pub fn actions(
-        &mut self,
-        events: &[Event],
-        modifiers: eframe::egui::Modifiers,
-        now: std::time::Instant,
-    ) -> Vec<InputAction> {
-        use std::time::Duration;
-        self.recent_native
-            .retain(|(_, at)| now.saturating_duration_since(*at) < Duration::from_millis(180));
-        let mut output = Vec::new();
-        for event in events {
-            if let Event::Key {
-                key, pressed: true, ..
-            } = event
-            {
-                if let Some(letter) = letter_for_key(*key) {
-                    self.recent_native.push((letter, now));
-                }
-                let action = classify_key(event);
-                if action != InputAction::Ignore {
-                    output.push(action);
-                }
-            }
-        }
-        if !modified(modifiers) {
-            for event in events {
-                if let Event::Text(text) = event
-                    && text.len() == 1
-                    && text.as_bytes()[0].is_ascii_alphabetic()
-                {
-                    let letter = char::from(text.as_bytes()[0].to_ascii_uppercase());
-                    if !self.recent_native.iter().any(|(ch, _)| *ch == letter) {
-                        output.push(InputAction::Letter(letter));
-                    }
-                }
-            }
-        }
-        output
-    }
-}
-
-/// Privacy-preserving event description for opt-in troubleshooting.
-/// Never print arbitrary text payloads or clipboard contents.
-pub fn describe_event(event: &Event) -> String {
-    match event {
-        Event::Key {
-            key,
-            pressed,
-            repeat,
-            modifiers,
-            ..
-        } => {
-            format!("key={key:?} pressed={pressed} repeat={repeat} mods={modifiers:?}")
-        }
-        Event::Text(text) => format!("text_event bytes={} (content omitted)", text.len()),
-        Event::Paste(text) => format!("paste_event bytes={} (content omitted)", text.len()),
-        Event::Copy => "copy_event".to_owned(),
-        Event::Cut => "cut_event".to_owned(),
-        _ => "other_event".to_owned(),
-    }
-}
-
-#[derive(Default)]
-pub struct Selection {
-    prefix: String,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SelectionOutcome {
-    Continue,
+#[derive(Debug, PartialEq, Eq)]
+pub enum TypedOutcome {
+    Continue(String),
     Selected(usize),
-    Invalid,
 }
 
-impl Selection {
-    pub fn prefix(&self) -> &str {
-        &self.prefix
-    }
-
-    pub fn clear(&mut self) {
-        self.prefix.clear();
-    }
-
-    pub fn backspace(&mut self) {
-        self.prefix.pop();
-    }
-
-    pub fn push(&mut self, ch: char, map: &Keymap) -> SelectionOutcome {
+pub fn resolve_typed(buffer: &str, map: &Keymap) -> TypedOutcome {
+    let mut prefix = String::new();
+    for ch in buffer.chars() {
         if !ch.is_ascii_alphabetic() {
-            return SelectionOutcome::Invalid;
+            continue;
         }
-        let letter = ch.to_ascii_uppercase();
-        self.prefix.push(letter);
-        match map.lookup(&self.prefix) {
-            Lookup::Selected(index) => {
-                // Completed keys must not remain as prefixes if an action
-                // fails or a future caller reuses this state.
-                self.prefix.clear();
-                SelectionOutcome::Selected(index)
-            }
-            Lookup::Continue => SelectionOutcome::Continue,
+        prefix.push(ch.to_ascii_uppercase());
+        match map.lookup(&prefix) {
+            Lookup::Selected(index) => return TypedOutcome::Selected(index),
+            Lookup::Continue => {}
             Lookup::Invalid => {
-                self.prefix.pop();
-                SelectionOutcome::Invalid
+                prefix.pop();
             }
         }
     }
+    TypedOutcome::Continue(prefix)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::config::Entry;
-    use eframe::egui::Modifiers;
 
-    fn event(key: Key, modifiers: Modifiers, repeat: bool) -> Event {
-        Event::Key {
-            key,
-            physical_key: None,
-            pressed: true,
-            repeat,
-            modifiers,
-        }
-    }
-
-    fn pinned(label: &str, shortcut: &str) -> Entry {
+    fn entry(label: &str, key: &str) -> Entry {
         Entry {
             label: label.into(),
             text: label.into(),
-            key: Some(shortcut.into()),
+            key: Some(key.into()),
             priority: 0,
         }
     }
 
     #[test]
-    fn unmodified_letter_triggers_and_repeat_does_not() {
-        assert_eq!(
-            classify_key(&event(Key::A, Modifiers::NONE, false)),
-            InputAction::Letter('A')
-        );
-        assert_eq!(
-            classify_key(&event(Key::A, Modifiers::NONE, true)),
-            InputAction::Ignore
-        );
+    fn selects_terminal_without_enter() {
+        let map = Keymap::build(&[entry("Greeting", "G"), entry("Closing", "C")]).unwrap();
+        assert_eq!(resolve_typed("g", &map), TypedOutcome::Selected(0));
+        assert_eq!(resolve_typed("C", &map), TypedOutcome::Selected(1));
+        assert_eq!(resolve_typed("f", &map), TypedOutcome::Continue(String::new()));
+        assert_eq!(resolve_typed("fc", &map), TypedOutcome::Selected(1));
     }
 
     #[test]
-    fn modifier_hotkeys_cannot_select_items() {
-        for modifiers in [Modifiers::CTRL, Modifiers::ALT, Modifiers::COMMAND] {
-            assert_eq!(
-                classify_key(&event(Key::S, modifiers, false)),
-                InputAction::Ignore
-            );
-        }
-        assert_eq!(
-            classify_key(&event(Key::A, Modifiers::SHIFT, false)),
-            InputAction::Letter('A')
-        );
+    fn multi_key_prefixes_and_backspace_work() {
+        let map = Keymap::build(&[entry("Brief", "BA"), entry("Checklist", "BC")]).unwrap();
+        assert_eq!(resolve_typed("b", &map), TypedOutcome::Continue("B".into()));
+        assert_eq!(resolve_typed("bz", &map), TypedOutcome::Continue("B".into()));
+        assert_eq!(resolve_typed("bc", &map), TypedOutcome::Selected(1));
+        assert_eq!(resolve_typed("", &map), TypedOutcome::Continue(String::new()));
+        assert_eq!(resolve_typed("ba", &map), TypedOutcome::Selected(0));
     }
 
     #[test]
-    fn text_only_event_selects_without_native_key() {
-        let mut k = KeyboardInput::default();
-        let now = std::time::Instant::now();
-        assert_eq!(
-            k.actions(&[Event::Text("g".into())], Modifiers::NONE, now),
-            vec![InputAction::Letter('G')]
-        );
-        assert!(
-            k.actions(&[Event::Text("paste".into())], Modifiers::NONE, now)
-                .is_empty()
-        );
-        assert!(
-            k.actions(&[Event::Text("é".into())], Modifiers::NONE, now)
-                .is_empty()
-        );
-    }
-    #[test]
-    fn native_key_deduplicates_text_across_frames() {
-        let mut k = KeyboardInput::default();
-        let now = std::time::Instant::now();
-        let both = vec![
-            event(Key::A, Modifiers::NONE, false),
-            Event::Text("a".into()),
-        ];
-        assert_eq!(
-            k.actions(&both, Modifiers::NONE, now),
-            vec![InputAction::Letter('A')]
-        );
-        assert!(
-            k.actions(
-                &[Event::Text("a".into())],
-                Modifiers::NONE,
-                now + std::time::Duration::from_millis(40)
-            )
-            .is_empty()
-        );
-    }
-    #[test]
-    fn unrelated_native_key_does_not_disable_text_fallback() {
-        let mut k = KeyboardInput::default();
-        let now = std::time::Instant::now();
-        assert_eq!(
-            k.actions(
-                &[event(Key::Escape, Modifiers::NONE, false)],
-                Modifiers::NONE,
-                now
-            ),
-            vec![InputAction::Close]
-        );
-        assert_eq!(
-            k.actions(&[Event::Text("g".into())], Modifiers::NONE, now),
-            vec![InputAction::Letter('G')]
-        );
-    }
-    #[test]
-    fn dedup_window_expires_for_text_only_keys() {
-        let mut k = KeyboardInput::default();
-        let now = std::time::Instant::now();
-        assert_eq!(
-            k.actions(
-                &[event(Key::G, Modifiers::NONE, false)],
-                Modifiers::NONE,
-                now
-            ),
-            vec![InputAction::Letter('G')]
-        );
-        assert_eq!(
-            k.actions(
-                &[Event::Text("g".into())],
-                Modifiers::NONE,
-                now + std::time::Duration::from_millis(200)
-            ),
-            vec![InputAction::Letter('G')]
-        );
-    }
-    #[test]
-    fn modified_key_cannot_leak_via_text_fallback() {
-        let mut k = KeyboardInput::default();
-        let now = std::time::Instant::now();
-        let both = vec![
-            event(Key::G, Modifiers::CTRL, false),
-            Event::Text("g".into()),
-        ];
-        assert!(k.actions(&both, Modifiers::CTRL, now).is_empty());
-        assert!(
-            k.actions(
-                &[Event::Text("g".into())],
-                Modifiers::NONE,
-                now + std::time::Duration::from_millis(40)
-            )
-            .is_empty()
-        );
+    fn first_complete_terminal_wins_in_batched_input() {
+        let map = Keymap::build(&[entry("Greeting", "G"), entry("Closing", "C")]).unwrap();
+        assert_eq!(resolve_typed("gc", &map), TypedOutcome::Selected(0));
+        assert_eq!(resolve_typed("🌎é!", &map), TypedOutcome::Continue(String::new()));
     }
 
     #[test]
-    fn diagnostic_messages_never_disclose_text_payloads() {
-        let value = "private content not for logs";
-        let message = describe_event(&Event::Text(value.into()));
-        assert!(!message.contains(value));
-        assert!(message.contains("content omitted"));
-        let paste_message = describe_event(&Event::Paste(value.into()));
-        assert!(!paste_message.contains(value));
-    }
-
-    #[test]
-    fn special_keys_and_text_input() {
-        assert_eq!(
-            classify_key(&event(Key::Escape, Modifiers::NONE, false)),
-            InputAction::Close
+    fn native_egui_focused_text_edit_consumes_keyboard_input() {
+        let ctx = eframe::egui::Context::default();
+        let mut input = String::new();
+        let _ = ctx.run(Default::default(), |ctx| {
+            eframe::egui::CentralPanel::default().show(ctx, |ui| {
+                ui.add(eframe::egui::TextEdit::singleline(&mut input)).request_focus();
+            });
+        });
+        let _ = ctx.run(
+            eframe::egui::RawInput {
+                events: vec![eframe::egui::Event::Text("G".into())],
+                ..Default::default()
+            },
+            |ctx| {
+                eframe::egui::CentralPanel::default().show(ctx, |ui| {
+                    ui.add(eframe::egui::TextEdit::singleline(&mut input));
+                });
+            },
         );
-        assert_eq!(
-            classify_key(&event(Key::Backspace, Modifiers::NONE, false)),
-            InputAction::Backspace
-        );
-        assert_eq!(classify_key(&Event::Text("E".into())), InputAction::Ignore);
-    }
-
-    #[test]
-    fn invalid_letter_preserves_valid_prefix() {
-        let map = Keymap::build(&[pinned("Brief", "BA"), pinned("Checklist", "BC")]).unwrap();
-        let mut picker = Selection::default();
-        assert_eq!(picker.push('b', &map), SelectionOutcome::Continue);
-        assert_eq!(picker.push('z', &map), SelectionOutcome::Invalid);
-        assert_eq!(picker.prefix(), "B");
-        picker.backspace();
-        assert_eq!(picker.prefix(), "");
-        assert_eq!(picker.push('b', &map), SelectionOutcome::Continue);
-        assert_eq!(picker.push('c', &map), SelectionOutcome::Selected(1));
-        assert_eq!(picker.prefix(), "");
-    }
-
-    #[test]
-    fn terminal_selection_cannot_poison_the_next_key() {
-        let map = Keymap::build(&[pinned("Greeting", "G"), pinned("Closing", "C")]).unwrap();
-        let mut selection = Selection::default();
-        assert_eq!(selection.push('G', &map), SelectionOutcome::Selected(0));
-        assert!(selection.prefix().is_empty());
-        assert_eq!(selection.push('C', &map), SelectionOutcome::Selected(1));
-        assert!(selection.prefix().is_empty());
-    }
-
-    #[test]
-    fn clear_resets_after_clipboard_error() {
-        let map = Keymap::build(&[pinned("Email", "E")]).unwrap();
-        let mut selection = Selection::default();
-        assert_eq!(selection.push('e', &map), SelectionOutcome::Selected(0));
-        selection.clear();
-        assert_eq!(selection.prefix(), "");
-        assert_eq!(selection.push('E', &map), SelectionOutcome::Selected(0));
+        assert_eq!(input, "G");
     }
 }

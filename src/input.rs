@@ -174,7 +174,7 @@ impl Selection {
                 // fails or a future caller reuses this state.
                 self.prefix.clear();
                 SelectionOutcome::Selected(index)
-            },
+            }
             Lookup::Continue => SelectionOutcome::Continue,
             Lookup::Invalid => {
                 self.prefix.pop();

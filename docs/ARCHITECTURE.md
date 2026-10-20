@@ -10,12 +10,12 @@ Trievium is a single-process, on-demand selection UI: **keybind -> prefix-tree l
 - `trie.rs`: deterministic, prefix-free shortcut generation and lookup; no UI dependencies.
 - `shortcut_cache.rs`: per-configuration persistent mnemonic assignments, storing labels and keys only.
 - `clipboard.rs`: uses `wl-copy` via direct process arguments and piped input (no shell or quoting).
-- `input.rs`: pure shortcut-input state machine and key-event classifier, with tests for modifier suppression, repeats and invalid prefixes.
+- `input.rs`: focused shortcut-field text reducer, with terminal and invalid-prefix tests plus simulated egui input.
 - `launch.rs`: session-local advisory lock, preventing duplicate modal instances with no signals or process kills.
 - `hyprland.rs`: bounded, one-shot Hyprland window correction. Finds only a mapped `trievium` window belonging to the current process, then sets floating/size/focus and centers it. Does not touch global rules, workspaces, or other windows.
 - `main.rs`: small CLI (including read-only `doctor`) and focused egui picker.
 
-Config is read once at launch, without a watcher, daemon, or network calls. Keyboard handling prefers egui key-down events and ignores OS key-repeat and Ctrl/Alt/Super combinations. The ASCII text-event fallback remains available even after unrelated native key events. Recently received native letter events suppress matching text for 180 ms across frames, preventing duplicate selections; modified chords are ignored. Unassigned letters are silently ignored. Failed clipboard operations reset the prefix for a safe retry. The visible-match list and next-letter hints are recomputed on prefix changes, not on every UI redraw. For now, changes take effect on the next invocation.
+Config is read once at launch, without a watcher, daemon, or network calls. The picker now uses a focused native egui TextEdit, following the OTPick and Passflick approach, rather than manually routing raw Key/Text events. Egui owns keyboard focus and Backspace editing; the prefix tree reduces the input buffer on each edit and immediately executes a terminal shortcut without Enter. Unassigned letters are silently ignored. Failed clipboard operations clear the field. The visible-match list and next-letter hints are recomputed on prefix changes, not on every UI redraw. For now, changes take effect on the next invocation.
 
 ## Key assignment and invariants
 
@@ -39,7 +39,7 @@ The picker attempts to obtain a session-local lock in `XDG_RUNTIME_DIR/trievium.
 
 ## Input troubleshooting
 
-`--diagnose-input` provides opt-in terminal diagnostics for egui focus, key metadata, text/paste event length, routed selection action, and clipboard outcome. It never serializes expansion content or raw arbitrary text, and it does not persist logs. This is meant to tell apart compositor focus loss, ignored/modified events, invalid shortcut codes, and clipboard errors without further guessing. An attempted launch while another picker owns the session lock emits a message rather than silently exiting.
+`--diagnose-input` provides opt-in terminal diagnostics for window and focused-field state, prefix length, selected shortcut, and clipboard outcome. It never serializes expansion content or raw arbitrary text, and it does not persist logs. This is meant to tell apart compositor focus loss, ignored/modified events, invalid shortcut codes, and clipboard errors without further guessing. An attempted launch while another picker owns the session lock emits a message rather than silently exiting.
 
 ## Clipboard reliability
 

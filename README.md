@@ -2,7 +2,7 @@
 
 **A keyboard-driven prefix-tree selector.** Native Rust + egui for Linux/Wayland.
 
-Open it with a Hyprland keybind, press the displayed key sequence, and Trievium copies the selected text and exits. No Enter, search box, mouse, timeout, daemon, or auto-typing into other windows is required. Trievium is a **selection launcher**, not a global text-expansion hook or a replacement for the Lexwright editor.
+Open it with a Hyprland keybind, press the displayed key sequence, and Trievium copies the selected text and exits. No Enter, mouse, timeout, daemon, or auto-typing into other windows is required. A small focused shortcut input receives the keys; this is not a search box or editor. Trievium is a **selection launcher**, not a global text-expansion hook or a replacement for the Lexwright editor.
 
 ## Quick start (EndeavourOS / Hyprland)
 
@@ -32,7 +32,7 @@ Replace the absolute path with your actual location. Choose a keybind that does 
 
 ## Diagnosing missed shortcuts
 
-Run `trievium --diagnose-input` instead of `trievium` when a key is ignored. The popup displays a diagnostic-mode indicator and the launching terminal receives *key-event metadata*, routing decisions, focus changes, and clipboard success/failure. It does **not** print stored snippets, typed text contents, or paste payloads. No diagnostic file is saved or uploaded. This flag is opt-in and does not affect ordinary launches.
+Run `trievium --diagnose-input` instead of `trievium` when a key is ignored. The popup displays a diagnostic-mode indicator and the launching terminal reports window focus, shortcut-field focus, normalized input length, selected shortcut, and clipboard success/failure. It does **not** print stored snippets or typed text contents. No diagnostic file is saved or uploaded. This flag is opt-in and does not affect ordinary launches.
 
 If another instance is already open, a new invocation prints an explicit message rather than silently returning. Close the previous picker before retesting an updated binary so the old process isn't mistaken for the new build.
 
@@ -47,7 +47,7 @@ CI also produces a packaged Linux x86_64 binary from each successful run. Open t
 - `G` could immediately copy your Greeting and close.
 - `T` could reveal several choices, with `TA` and `TB` as terminal sequences.
 - `Esc` closes without copying; `Backspace` corrects a partial sequence.
-- Selection prefers fresh letter key-down events, ignoring OS key-repeat and Ctrl/Alt/Super combinations. A single-character text-event fallback remains available even when unrelated native key-down events occur; native and text paths are deduplicated across frames. Unassigned letters are silently ignored, and available shortcuts are shown at the top.
+- A focused native egui shortcut input receives typing and Backspace, following the working OTPick and Passflick pattern. The prefix tree selects terminal sequences immediately without Enter; unmapped letters are harmless. No raw event router or cross-frame timer is needed.
 - Clicking a row or its key badge also copies and exits.
 - The popup sizes itself to the entry count (up to a maximum), shows remaining key choices, and virtualizes long lists for responsive scrolling.
 - A session-local advisory lock prevents repeated hotkey presses opening multiple windows; no existing process is terminated. If `XDG_RUNTIME_DIR` is absent, locking is skipped.

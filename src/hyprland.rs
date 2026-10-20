@@ -82,12 +82,8 @@ fn popup_dispatchers(address: &str, width: i32, height: i32) -> Result<[String; 
     }
     let selector = format!("address:{address}");
     Ok([
-        format!(
-            "hl.dsp.window.float({{ window = \"{selector}\", action = \"enable\" }})"
-        ),
-        format!(
-            "hl.dsp.window.resize({{ window = \"{selector}\", x = {width}, y = {height} }})"
-        ),
+        format!("hl.dsp.window.float({{ window = \"{selector}\", action = \"enable\" }})"),
+        format!("hl.dsp.window.resize({{ window = \"{selector}\", x = {width}, y = {height} }})"),
         format!("hl.dsp.window.center({{ window = \"{selector}\" }})"),
         format!("hl.dsp.focus({{ window = \"{selector}\" }})"),
     ])
@@ -190,7 +186,10 @@ hl = {
 "#;
         for expression in popup_dispatchers("0xabc123", 560, 420).unwrap() {
             let script = format!("{prelude}\nhl.dispatch({expression})");
-            let output = Command::new(interpreter).args(["-e", &script]).output().unwrap();
+            let output = Command::new(interpreter)
+                .args(["-e", &script])
+                .output()
+                .unwrap();
             assert!(
                 output.status.success(),
                 "Lua rejected generated dispatcher {expression}: {}",
@@ -198,5 +197,4 @@ hl = {
             );
         }
     }
-
 }

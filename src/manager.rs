@@ -21,7 +21,11 @@ impl EntryForm {
         Self {
             label: entry.label.clone(),
             text: entry.text.clone(),
-            key: entry.key.as_deref().unwrap_or_default().to_ascii_lowercase(),
+            key: entry
+                .key
+                .as_deref()
+                .unwrap_or_default()
+                .to_ascii_lowercase(),
             priority: entry.priority,
         }
     }
@@ -263,7 +267,11 @@ impl Manager {
             .max_height(190.0)
             .show(ui, |ui| {
                 for (index, entry) in self.config.entries.iter().enumerate() {
-                    let label = format!("{}    {}", self.map.key(index).to_ascii_lowercase(), entry.label);
+                    let label = format!(
+                        "{}    {}",
+                        self.map.key(index).to_ascii_lowercase(),
+                        entry.label
+                    );
                     if ui
                         .selectable_label(self.selected == Some(index), label)
                         .clicked()
@@ -274,10 +282,7 @@ impl Manager {
             });
     }
 
-    fn input_frame<R>(
-        ui: &mut egui::Ui,
-        body: impl FnOnce(&mut egui::Ui) -> R,
-    ) -> R {
+    fn input_frame<R>(ui: &mut egui::Ui, body: impl FnOnce(&mut egui::Ui) -> R) -> R {
         let light = !ui.visuals().dark_mode;
         let fill = if light {
             egui::Color32::from_rgb(246, 248, 252)

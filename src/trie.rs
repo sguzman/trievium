@@ -145,8 +145,8 @@ impl Keymap {
         let mut free = capacity(depth) - used;
         // Keep existing mnemonic assignments unless they conflict with pinned
         // keys or would exhaust all available space for the remaining entries.
-        // If every letter has already been used, the least-prioritized
-        // remembered shortcut yields to longer sequences.
+        // If every letter is occupied, a cached shortcut may need to
+        // yield to a longer sequence so the new entry still fits.
         let mut unresolved = 0_usize;
         for (position, &index) in auto.iter().enumerate() {
             let Some(code) = previous.get(&entries[index].label) else {
@@ -158,7 +158,7 @@ impl Keymap {
                 continue;
             }
             let cost = capacity(depth - code.len());
-            // Include unassigned, higher-priority entries visited earlier as
+            // Include entries visited earlier but not yet assigned as
             // well as everything still to come. Otherwise a full remembered
             // alphabet could consume the last free branch before a new entry
             // can receive a shortcut.

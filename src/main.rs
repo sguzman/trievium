@@ -102,7 +102,7 @@ fn run() -> Result<()> {
             let picker_height = picker_height(config.entries.len());
             let start_managing = command == "manage";
             let (window_width, window_height) = if start_managing {
-                (760.0, 580.0)
+                (780.0, 620.0)
             } else {
                 (560.0, picker_height)
             };
@@ -262,7 +262,8 @@ impl Picker {
                 self.manager = Some(manager);
                 self.typed.clear();
                 self.error = None;
-                ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(760.0, 580.0)));
+                ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(780.0, 620.0)));
+                hyprland::resize_own_popup(780, 620);
             }
             Err(error) => self.error = Some(format!("{error:#}")),
         }
@@ -277,10 +278,9 @@ impl Picker {
                 .sort_by(|&a, &b| self.map.key(a).cmp(self.map.key(b)));
             self.refresh_choices();
             self.error = None;
-            ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(
-                560.0,
-                picker_height(self.config.entries.len()),
-            )));
+            let height = picker_height(self.config.entries.len());
+            ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(560.0, height)));
+            hyprland::resize_own_popup(560, height.round() as i32);
         }
     }
 
@@ -357,9 +357,16 @@ impl eframe::App for Picker {
         // the same desktop/system appearance.
         ui.painter()
             .rect_filled(ui.max_rect(), 0.0, Appearance::background(theme));
+        // Escape is a guaranteed escape hatch in both picker and manager.
+        // Do this before the manager body: it previously swallowed Escape.
+        if ui.input(|input| input.key_pressed(egui::Key::Escape)) {
+            std::process::exit(0);
+        }
         if let Some(manager) = self.manager.as_mut() {
-            if manager.ui(ui) == ManagerAction::Back {
-                self.close_manager(ui.ctx());
+            match manager.ui(ui) {
+                ManagerAction::Back => self.close_manager(ui.ctx()),
+                ManagerAction::Exit => std::process::exit(0),
+                ManagerAction::Stay => {}
             }
             return;
         }
@@ -368,10 +375,6 @@ impl eframe::App for Picker {
             eprintln!("trievium diagnostics: window focus={focused}");
             self.last_focus = Some(focused);
         }
-        if ui.input(|input| input.key_pressed(egui::Key::Escape)) {
-            std::process::exit(0);
-        }
-
         let (field, edit_clicked) = ui
             .horizontal(|ui| {
                 ui.heading("Trievium");

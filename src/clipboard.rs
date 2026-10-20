@@ -15,7 +15,10 @@ fn copy_with(program: &str, args: &[&str], text: &str) -> Result<()> {
         .args(args)
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
-        .stderr(Stdio::piped())
+        // wl-copy forks a background clipboard owner. If stderr is a pipe,
+        // the daemon can inherit that pipe and wait_with_output() will block
+        // forever waiting for EOF even after the launcher has exited.
+        .stderr(Stdio::null())
         .spawn()
         .with_context(|| {
             format!(
@@ -28,12 +31,11 @@ fn copy_with(program: &str, args: &[&str], text: &str) -> Result<()> {
             .write_all(text.as_bytes())
             .context("Writing clipboard content")?;
     }
-    let output = child.wait_with_output().context("Waiting for wl-copy")?;
-    if !output.status.success() {
-        bail!(
-            "wl-copy failed: {}",
-            String::from_utf8_lossy(&output.stderr).trim()
-        );
+    // Wait only for the direct launcher process, not pipes inherited by
+    // its background clipboard-serving child.
+    let status = child.wait().context("Waiting for clipboard launcher")?;
+    if !status.success() {
+        bail!("Clipboard launcher exited with {status}");
     }
     Ok(())
 }
@@ -55,6 +57,20 @@ mod tests {
         copy_with("tee", &[destination], original).unwrap();
         assert_eq!(std::fs::read(&path).unwrap(), original.as_bytes());
         std::fs::remove_file(path).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn does_not_block_on_clipboard_daemon_inherited_stderr() {
+        // The direct child consumes stdin and forks a descendant that keeps
+        // inherited descriptors open for several seconds, as wl-copy does.
+        // wait_with_output() with piped stderr would stall here until EOF.
+        let start = std::time::Instant::now();
+        copy_with("sh", &["-c", "cat >/dev/null; sleep 3 &"], "example").unwrap();
+        assert!(
+            start.elapsed() < std::time::Duration::from_secs(1),
+            "clipboard handoff waited for background server"
+        );
     }
 
     #[test]

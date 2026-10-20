@@ -45,7 +45,10 @@ mod tests {
         let map = Keymap::build(&[entry("Greeting", "G"), entry("Closing", "C")]).unwrap();
         assert_eq!(resolve_typed("g", &map), TypedOutcome::Selected(0));
         assert_eq!(resolve_typed("C", &map), TypedOutcome::Selected(1));
-        assert_eq!(resolve_typed("f", &map), TypedOutcome::Continue(String::new()));
+        assert_eq!(
+            resolve_typed("f", &map),
+            TypedOutcome::Continue(String::new())
+        );
         assert_eq!(resolve_typed("fc", &map), TypedOutcome::Selected(1));
     }
 
@@ -53,9 +56,15 @@ mod tests {
     fn multi_key_prefixes_and_backspace_work() {
         let map = Keymap::build(&[entry("Brief", "BA"), entry("Checklist", "BC")]).unwrap();
         assert_eq!(resolve_typed("b", &map), TypedOutcome::Continue("B".into()));
-        assert_eq!(resolve_typed("bz", &map), TypedOutcome::Continue("B".into()));
+        assert_eq!(
+            resolve_typed("bz", &map),
+            TypedOutcome::Continue("B".into())
+        );
         assert_eq!(resolve_typed("bc", &map), TypedOutcome::Selected(1));
-        assert_eq!(resolve_typed("", &map), TypedOutcome::Continue(String::new()));
+        assert_eq!(
+            resolve_typed("", &map),
+            TypedOutcome::Continue(String::new())
+        );
         assert_eq!(resolve_typed("ba", &map), TypedOutcome::Selected(0));
     }
 
@@ -63,7 +72,10 @@ mod tests {
     fn first_complete_terminal_wins_in_batched_input() {
         let map = Keymap::build(&[entry("Greeting", "G"), entry("Closing", "C")]).unwrap();
         assert_eq!(resolve_typed("gc", &map), TypedOutcome::Selected(0));
-        assert_eq!(resolve_typed("🌎é!", &map), TypedOutcome::Continue(String::new()));
+        assert_eq!(
+            resolve_typed("🌎é!", &map),
+            TypedOutcome::Continue(String::new())
+        );
     }
 
     #[test]
@@ -72,7 +84,8 @@ mod tests {
         let mut input = String::new();
         let _ = ctx.run(Default::default(), |ctx| {
             eframe::egui::CentralPanel::default().show(ctx, |ui| {
-                ui.add(eframe::egui::TextEdit::singleline(&mut input)).request_focus();
+                ui.add(eframe::egui::TextEdit::singleline(&mut input))
+                    .request_focus();
             });
         });
         let _ = ctx.run(

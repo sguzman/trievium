@@ -250,7 +250,10 @@ impl Picker {
         match resolve_typed(&self.typed, &self.map) {
             TypedOutcome::Selected(index) => {
                 if self.diagnose_input {
-                    eprintln!("trievium diagnostics: shortcut {} selected", self.map.key(index));
+                    eprintln!(
+                        "trievium diagnostics: shortcut {} selected",
+                        self.map.key(index)
+                    );
                 }
                 self.select(index);
             }
@@ -302,7 +305,10 @@ impl eframe::App for Picker {
             field.request_focus();
         }
         if self.diagnose_input && self.input_has_focus != Some(field.has_focus()) {
-            eprintln!("trievium diagnostics: shortcut field focus={}", field.has_focus());
+            eprintln!(
+                "trievium diagnostics: shortcut field focus={}",
+                field.has_focus()
+            );
             self.input_has_focus = Some(field.has_focus());
         }
         if field.changed() {

@@ -6,7 +6,8 @@ Trievium is a single-process, on-demand selection UI: **keybind -> prefix-tree l
 
 ## Modules
 
-- `config.rs`: strict versioned JSON input; filesystem discovery; non-destructive `init`.
+- `config.rs`: strict versioned JSON input, filesystem discovery, non-destructive initialization, and atomic on-disk saves with external-edit detection.
+- `manager.rs`: in-app CRUD editor, prefix collision validation, and optional pinned-key controls, isolated from the picker hot path.
 - `trie.rs`: deterministic, prefix-free shortcut generation and lookup; no UI dependencies.
 - `shortcut_cache.rs`: per-configuration persistent mnemonic assignments, storing labels and keys only.
 - `clipboard.rs`: uses `wl-copy` via direct process arguments and piped input (no shell or quoting).
@@ -16,7 +17,7 @@ Trievium is a single-process, on-demand selection UI: **keybind -> prefix-tree l
 - `hyprland.rs`: bounded, one-shot Hyprland window correction. Finds only a mapped `trievium` window belonging to the current process, then sets floating/size/focus and centers it. Does not touch global rules, workspaces, or other windows.
 - `main.rs`: small CLI (including read-only `doctor`) and focused egui picker.
 
-Config is read once at launch, without a watcher, daemon, or network calls. The picker now uses a focused native egui TextEdit, following the OTPick and Passflick approach, rather than manually routing raw Key/Text events. Egui owns keyboard focus and Backspace editing; the prefix tree reduces the input buffer on each edit and immediately executes a terminal shortcut without Enter. Unassigned letters are silently ignored. Failed clipboard operations clear the field. The visible-match list is recomputed only on prefix changes, not on every UI redraw. The normal UI deliberately omits tutorial captions, prompts, counts, and focus warnings; only actual clipboard errors are displayed. For now, changes take effect on the next invocation.
+Config is read at launch, without a watcher, daemon, or network calls. The native entry editor writes local JSON atomically and updates the in-memory keymap when returning to the picker; no restart is needed for in-app edits. The picker now uses a focused native egui TextEdit, following the OTPick and Passflick approach, rather than manually routing raw Key/Text events. Egui owns keyboard focus and Backspace editing; the prefix tree reduces the input buffer on each edit and immediately executes a terminal shortcut without Enter. Unassigned letters are silently ignored. Failed clipboard operations clear the field. The visible-match list is recomputed only on prefix changes, not on every UI redraw. The normal UI deliberately omits tutorial captions, prompts, counts, and focus warnings; only actual clipboard errors are displayed. For now, changes take effect on the next invocation.
 
 ## Key assignment and invariants
 
@@ -61,8 +62,8 @@ Clipboard managers may record selected content. Users should not put passwords/s
 - Verify interactive focus, float placement, theme and latency on a real Hyprland session. The GitHub CI environment has no compositor; compiling does not establish native interactive correctness.
 - Measure cold-start overhead and reduce it. The current UI limits initial window height and virtualizes large lists, but initial OpenGL/egui startup is not guaranteed instant; benchmark before promising latency.
 - Extend backends only after stable text/clipboard operation, with explicit and auditable actions.
-- Optional lightweight editor and importers for Lexwright / external datasets, without putting the editor on the hot path.
-- Optional stable assignment cache if pinning individual keys becomes cumbersome.
+- Polish the native entry editor after real usage; do not introduce importer dependencies.
+- Continue preserving mnemonic assignments while maintaining pinned-key compatibility.
 - Accessibility options, keyboard-layout handling, pagination and big-dataset UI after dogfooding.
 
 ## Privacy

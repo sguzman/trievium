@@ -2,7 +2,7 @@
 
 **A keyboard-driven prefix-tree selector.** Native Rust + egui for Linux/Wayland.
 
-Open it with a Hyprland keybind, press the displayed key sequence, and Trievium copies the selected text and exits. No Enter, mouse, timeout, daemon, or auto-typing into other windows is required. A small focused shortcut input receives the keys; this is not a search box or editor. Trievium is a **selection launcher**, not a global text-expansion hook or a replacement for the Lexwright editor.
+Open it with a Hyprland keybind, press the displayed key sequence, and Trievium copies the selected text and exits. Click **Edit** to manage entries directly in the native application. No Enter, mouse, timeout, daemon, or auto-typing into other windows is required. A small focused shortcut input receives the keys; this is not a search box or editor. Trievium is a **selection launcher**, not a global text-expansion hook or a replacement for the Lexwright editor.
 
 ## Quick start (EndeavourOS / Hyprland)
 
@@ -29,6 +29,14 @@ bind = SUPER, P, exec, /absolute/path/to/trievium/target/release/trievium
 Replace the absolute path with your actual location. Choose a keybind that does not conflict with your existing binds.
 
 **Hyprland integration:** Trievium recognizes an active Hyprland session, waits briefly for its own window to map, then uses the Hyprland Lua dispatcher API to float, resize, center, raise above other windows, and focus **only its own process's window** (required for Hyprland 0.55+ Lua configurations). No compositor configuration edits or persistent rules are required. The integration runs once when opening, not continuously. On other compositors, Trievium relies on their default window-management behavior.
+
+## Manage entries in Trievium
+
+Click **Edit** in the picker, or launch `trievium manage` to open the larger management view immediately. This is the normal way to create and maintain your selection library. The app provides **New**, **Edit**, **Save**, **Delete** (with confirmation), **Discard changes**, and **Done**. Each entry has a name, multiline text to copy, optional pinned 1–4 letter shortcut and automatic priority. The list displays the assigned shortcut beside every entry. A saved change is available as soon as you return to the picker.
+
+The app saves the same local `items.json` file atomically and validates duplicate labels and conflicting prefixes before writing. Errors leave your previous configuration intact. If another program edited `items.json` while Trievium was open, the editor refuses to overwrite it. You can remove every entry and start with an empty library. On a first launch with no configuration, Trievium starts with an empty library rather than requiring `init`.
+
+The short-lived picker still has its immediate keyboard-to-clipboard exit behavior; the editor is used only when requested. No Lexwright integration or import workflow is included.
 
 ## Appearance (system, light, dark)
 
@@ -99,6 +107,6 @@ See [architecture](docs/ARCHITECTURE.md) for algorithm details, constraints and 
 
 ## Status
 
-**v0.3.0 ongoing development:** file-backed plaintext selection, deterministic prefix-free assignment, CLI validation, native picker and Wayland clipboard. This is an initial implementation, with the selection and clipboard lifecycle tested on Wayland and verified by local dogfooding. No tray, background service, editor, Lexwright importer, automated typing, or generalized actions yet. Keeping those out of the picker is intentional.
+**v0.4.0 ongoing development:** file-backed plaintext selection, deterministic prefix-free assignment, CLI validation, native picker and Wayland clipboard. This is an initial implementation, with the selection and clipboard lifecycle tested on Wayland and verified by local dogfooding. No tray, background service, Lexwright integration or importing, automated typing, or generalized actions. Keeping those out of the picker is intentional.
 
 MIT licensed; see [LICENSE](LICENSE).

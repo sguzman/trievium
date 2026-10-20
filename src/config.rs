@@ -144,6 +144,11 @@ pub fn save_atomic(path: &Path, config: &Config, expected_file: &[u8]) -> Result
     Ok(content)
 }
 
+/// Initialize a completely empty library for first-time GUI users.
+pub fn initialize_empty(path: &Path) -> Result<()> {
+    create_new_config(path, &Config { version: 1, entries: Vec::new() })
+}
+
 pub fn initialize(path: &Path) -> Result<()> {
     if path.exists() {
         bail!(
@@ -177,6 +182,16 @@ pub fn initialize(path: &Path) -> Result<()> {
             },
         ],
     };
+    create_new_config(path, &example)
+}
+
+fn create_new_config(path: &Path, config: &Config) -> Result<()> {
+    if path.exists() {
+        bail!("Refusing to overwrite existing configuration: {}", path.display());
+    }
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).with_context(|| format!("Creating {}", parent.display()))?;
+    }
     // create_new avoids a race and will never overwrite a user's data.
     let mut options = fs::OpenOptions::new();
     options.write(true).create_new(true);
@@ -189,7 +204,7 @@ pub fn initialize(path: &Path) -> Result<()> {
         .open(path)
         .with_context(|| format!("Creating {}", path.display()))?;
     use std::io::Write;
-    file.write_all(serde_json::to_string_pretty(&example)?.as_bytes())?;
+    file.write_all(serde_json::to_string_pretty(config)?.as_bytes())?;
     file.write_all(b"\n")?;
     Ok(())
 }
@@ -197,6 +212,16 @@ pub fn initialize(path: &Path) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn first_launch_creates_empty_collection_without_samples() {
+        let root = std::env::temp_dir().join(format!("trievium-new-library-{}", std::process::id()));
+        let path = root.join("nested/items.json");
+        initialize_empty(&path).unwrap();
+        assert_eq!(Config::load(&path).unwrap().entries.len(), 0);
+        assert!(initialize_empty(&path).is_err());
+        std::fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn accepts_empty_collection_for_in_app_management() {

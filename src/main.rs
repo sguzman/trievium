@@ -8,6 +8,7 @@ use trievium::config::{self, Config};
 use trievium::hyprland;
 use trievium::input::{TypedOutcome, resolve_typed};
 use trievium::launch::{self, Instance};
+use trievium::manager::{Manager, ManagerAction};
 use trievium::shortcut_cache;
 use trievium::trie::Keymap;
 
@@ -26,7 +27,7 @@ fn run() -> Result<()> {
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
-            "pick" | "init" | "validate" | "config-path" | "doctor" => command = arg,
+            "pick" | "manage" | "init" | "validate" | "config-path" | "doctor" => command = arg,
             "--diagnose-input" => diagnose_input = true,
             "--theme" | "--color-mode" => {
                 let mode = args
@@ -45,7 +46,7 @@ fn run() -> Result<()> {
             }
             "--help" | "-h" => {
                 println!(
-                    "Trievium - keyboard-first text selection\n\nUsage: trievium [pick|init|validate|config-path|doctor] [--config PATH] [--theme system|light|dark] [--diagnose-input]\n\nDefault: pick, with --theme system. Keys are automatically assigned unless pinned in the JSON config."
+                    "Trievium - keyboard-first text selection\n\nUsage: trievium [pick|manage|init|validate|config-path|doctor] [--config PATH] [--theme system|light|dark] [--diagnose-input]\n\nDefault: pick, with --theme system. Keys are automatically assigned unless pinned in the JSON config."
                 );
                 return Ok(());
             }
@@ -64,6 +65,11 @@ fn run() -> Result<()> {
         "config-path" => println!("{}", path.display()),
         "doctor" => return doctor(&path),
         "validate" => {
+            // A new user should be able to open the picker and create their
+            // first entry without running init or editing JSON.
+            if !path.exists() {
+                config::initialize_empty(&path)?;
+            }
             let config = Config::load(&path)?;
             let cache_path = shortcut_cache::path_for_config(&path)?;
             let previous = shortcut_cache::load(&cache_path);
@@ -93,15 +99,29 @@ fn run() -> Result<()> {
                 eprintln!("trievium: cannot save automatic key assignments: {error:#}");
             }
             // Only a title/input row and the actual selectable entries.
-            let window_height =
-                (56.0 + config.entries.len().min(9) as f32 * 39.0).clamp(175.0, 420.0);
+            let picker_height = picker_height(config.entries.len());
+            let start_managing = command == "manage";
+            let (window_width, window_height) = if start_managing {
+                (760.0, 580.0)
+            } else {
+                (560.0, picker_height)
+            };
             // The key order and matching list change only on prefix edits,
             // never on redraw. Keep the hot UI path proportional to visible rows.
             let mut ordered: Vec<usize> = (0..config.entries.len()).collect();
             ordered.sort_by(|&a, &b| map.key(a).cmp(map.key(b)));
+            let manager = if start_managing {
+                Some(Manager::new(path.clone(), cache_path.clone(), config.clone(), 
+                    Keymap::build_with_previous(&config.entries, &previous)?)?)
+            } else {
+                None
+            };
             let mut picker = Picker {
                 config,
                 map,
+                config_path: path,
+                cache_path,
+                manager,
                 typed: String::new(),
                 error: None,
                 ordered,
@@ -123,10 +143,10 @@ fn run() -> Result<()> {
                 viewport: egui::ViewportBuilder::default()
                     .with_title("Trievium")
                     .with_app_id("trievium")
-                    .with_inner_size([560.0, window_height])
+                    .with_inner_size([window_width, window_height])
                     .with_min_inner_size([400.0, 160.0])
                     .with_decorations(false)
-                    .with_resizable(false)
+                    .with_resizable(true)
                     .with_transparent(false)
                     .with_mouse_passthrough(false)
                     .with_always_on_top(),
@@ -135,7 +155,7 @@ fn run() -> Result<()> {
             // Hyprland otherwise places a normal Wayland toplevel in the
             // tiling layout. Correct only this process's mapped window, and
             // do it asynchronously so the first egui frame is not blocked.
-            hyprland::focus_new_popup(560, window_height.round() as i32);
+            hyprland::focus_new_popup(window_width as i32, window_height.round() as i32);
             eframe::run_native(
                 "trievium",
                 native,
@@ -148,6 +168,10 @@ fn run() -> Result<()> {
         }
     }
     Ok(())
+}
+
+fn picker_height(entries: usize) -> f32 {
+    (56.0 + entries.min(9) as f32 * 39.0).clamp(175.0, 420.0)
 }
 
 /// Non-destructive preflight: no clipboard writes, no config creation.
@@ -201,6 +225,9 @@ fn doctor(path: &Path) -> Result<()> {
 struct Picker {
     config: Config,
     map: Keymap,
+    config_path: PathBuf,
+    cache_path: PathBuf,
+    manager: Option<Manager>,
     typed: String,
     error: Option<String>,
     ordered: Vec<usize>,
@@ -211,6 +238,41 @@ struct Picker {
 }
 
 impl Picker {
+    fn open_manager(&mut self, ctx: &egui::Context) {
+        let previous: std::collections::BTreeMap<String, String> =
+            self.config.entries.iter().enumerate()
+                .map(|(i, entry)| (entry.label.clone(), self.map.key(i).to_owned()))
+                .collect();
+        match Keymap::build_with_previous(&self.config.entries, &previous)
+            .and_then(|map| Manager::new(
+                self.config_path.clone(), self.cache_path.clone(),
+                self.config.clone(), map
+            ))
+        {
+            Ok(manager) => {
+                self.manager = Some(manager);
+                self.typed.clear();
+                self.error = None;
+                ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(760.0, 580.0)));
+            }
+            Err(error) => self.error = Some(format!("{error:#}")),
+        }
+    }
+
+    fn close_manager(&mut self, ctx: &egui::Context) {
+        if let Some(manager) = self.manager.take() {
+            (self.config, self.map) = manager.into_data();
+            self.typed.clear();
+            self.ordered = (0..self.config.entries.len()).collect();
+            self.ordered.sort_by(|&a, &b| self.map.key(a).cmp(self.map.key(b)));
+            self.refresh_choices();
+            self.error = None;
+            ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(
+                egui::vec2(560.0, picker_height(self.config.entries.len()))
+            ));
+        }
+    }
+
     fn refresh_choices(&mut self) {
         let prefix = &self.typed;
         self.visible = self
@@ -280,6 +342,12 @@ impl eframe::App for Picker {
         // Paint an opaque surface in both modes. The original fixed dark
         // fill made egui's light theme unreadable.
         let theme = ui.ctx().theme();
+        if let Some(manager) = self.manager.as_mut() {
+            if manager.ui(ui) == ManagerAction::Back {
+                self.close_manager(ui.ctx());
+            }
+            return;
+        }
         ui.painter()
             .rect_filled(ui.max_rect(), 0.0, Appearance::background(theme));
         let focused = ui.input(|input| input.focused);
@@ -291,16 +359,22 @@ impl eframe::App for Picker {
             std::process::exit(0);
         }
 
-        let field = ui
+        let (field, edit_clicked) = ui
             .horizontal(|ui| {
                 ui.heading("Trievium");
-                ui.add(
+                let field = ui.add(
                     egui::TextEdit::singleline(&mut self.typed)
                         .desired_width(110.0)
                         .char_limit(4),
-                )
+                );
+                let edit_clicked = ui.button("Edit").clicked();
+                (field, edit_clicked)
             })
             .inner;
+        if edit_clicked {
+            self.open_manager(ui.ctx());
+            return;
+        }
         if !field.has_focus() {
             field.request_focus();
         }

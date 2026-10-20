@@ -141,10 +141,10 @@ pub fn save_atomic(path: &Path, config: &Config, expected_file: &[u8]) -> Result
         }
         bail!("No unique temporary path available for configuration save");
     })();
-    if let Some(path) = temp_path {
-        if result.is_err() {
-            let _ = fs::remove_file(path);
-        }
+    if let Some(path) = temp_path
+        && result.is_err()
+    {
+        let _ = fs::remove_file(path);
     }
     result?;
     Ok(content)

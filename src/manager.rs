@@ -215,11 +215,11 @@ impl Manager {
                 });
                 ui.add_space(8.0);
                 ui.horizontal(|ui| {
-                    if ui.button("Save").clicked() {
-                        if let Err(error) = self.save_form() {
-                            self.error = Some(format!("{error:#}"));
-                            self.message = None;
-                        }
+                    if ui.button("Save").clicked()
+                        && let Err(error) = self.save_form()
+                    {
+                        self.error = Some(format!("{error:#}"));
+                        self.message = None;
                     }
                     if ui.button("Discard changes").clicked() {
                         self.select(self.selected);
@@ -231,10 +231,10 @@ impl Manager {
                 if self.confirm_delete {
                     ui.horizontal(|ui| {
                         ui.label("Delete this entry?");
-                        if ui.button("Confirm delete").clicked() {
-                            if let Err(error) = self.delete_entry() {
-                                self.error = Some(format!("{error:#}"));
-                            }
+                        if ui.button("Confirm delete").clicked()
+                            && let Err(error) = self.delete_entry()
+                        {
+                            self.error = Some(format!("{error:#}"));
                         }
                         if ui.button("Cancel").clicked() {
                             self.confirm_delete = false;

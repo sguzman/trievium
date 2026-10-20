@@ -277,11 +277,8 @@ impl eframe::App for Picker {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         // Trievium must be a fully painted interactive window rather than
         // a translucent-looking overlay of the launching terminal.
-        ui.painter().rect_filled(
-            ui.max_rect(),
-            0.0,
-            egui::Color32::from_rgb(20, 24, 30),
-        );
+        ui.painter()
+            .rect_filled(ui.max_rect(), 0.0, egui::Color32::from_rgb(20, 24, 30));
         let focused = ui.input(|input| input.focused);
         if self.diagnose_input && self.last_focus != Some(focused) {
             eprintln!("trievium diagnostics: window focus={focused}");

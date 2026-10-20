@@ -75,7 +75,7 @@ fn run() -> Result<()> {
             let previous = shortcut_cache::load(&cache_path);
             let map = Keymap::build_with_previous(&config.entries, &previous)?;
             for (index, entry) in config.entries.iter().enumerate() {
-                println!("{:<5} {}", map.key(index), entry.label);
+                println!("{:<5} {}", map.key(index).to_ascii_lowercase(), entry.label);
             }
         }
         _ => {
@@ -175,8 +175,23 @@ fn run() -> Result<()> {
     Ok(())
 }
 
+const PICKER_ROW_HEIGHT: f32 = 32.0;
+
 fn picker_height(entries: usize) -> f32 {
-    (56.0 + entries.min(9) as f32 * 39.0).clamp(175.0, 420.0)
+    (74.0 + entries.min(9) as f32 * PICKER_ROW_HEIGHT).clamp(140.0, 380.0)
+}
+
+/// On Hyprland a floating window's geometry belongs to the compositor.
+/// Do not issue a second competing Wayland size request at the same time.
+fn resize_dialog(ctx: &egui::Context, width: i32, height: i32) {
+    if std::env::var_os("HYPRLAND_INSTANCE_SIGNATURE").is_some_and(|s| !s.is_empty()) {
+        hyprland::resize_own_popup(width, height);
+    } else {
+        ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(
+            width as f32,
+            height as f32,
+        )));
+    }
 }
 
 /// Non-destructive preflight: no clipboard writes, no config creation.
@@ -263,8 +278,7 @@ impl Picker {
                 self.manager = Some(manager);
                 self.typed.clear();
                 self.error = None;
-                ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(780.0, 620.0)));
-                hyprland::resize_own_popup(780, 620);
+                resize_dialog(ctx, 780, 620);
             }
             Err(error) => self.error = Some(format!("{error:#}")),
         }
@@ -280,18 +294,17 @@ impl Picker {
             self.refresh_choices();
             self.error = None;
             let height = picker_height(self.config.entries.len());
-            ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(560.0, height)));
-            hyprland::resize_own_popup(560, height.round() as i32);
+            resize_dialog(ctx, 560, height.round() as i32);
         }
     }
 
     fn refresh_choices(&mut self) {
-        let prefix = &self.typed;
+        let prefix = self.typed.to_ascii_uppercase();
         self.visible = self
             .ordered
             .iter()
             .copied()
-            .filter(|&index| self.map.key(index).starts_with(prefix))
+            .filter(|&index| self.map.key(index).starts_with(&prefix))
             .collect();
     }
 
@@ -341,7 +354,7 @@ impl Picker {
                 if self.diagnose_input {
                     eprintln!("trievium diagnostics: {} prefix letters", prefix.len());
                 }
-                self.typed = prefix;
+                self.typed = prefix.to_ascii_lowercase();
                 self.refresh_choices();
                 self.error = None;
             }
@@ -371,82 +384,97 @@ impl eframe::App for Picker {
             }
             return;
         }
-        let focused = ui.input(|input| input.focused);
-        if self.diagnose_input && self.last_focus != Some(focused) {
-            eprintln!("trievium diagnostics: window focus={focused}");
-            self.last_focus = Some(focused);
-        }
-        let (field, edit_clicked) = ui
-            .horizontal(|ui| {
-                ui.heading("Trievium");
-                let field = ui.add(
-                    egui::TextEdit::singleline(&mut self.typed)
-                        .desired_width(110.0)
-                        .char_limit(4),
-                );
-                let edit_clicked = ui.button("Edit").clicked();
-                (field, edit_clicked)
-            })
-            .inner;
-        if edit_clicked {
-            self.open_manager(ui.ctx());
-            return;
-        }
-        if !field.has_focus() {
-            field.request_focus();
-        }
-        if self.diagnose_input && self.input_has_focus != Some(field.has_focus()) {
-            eprintln!(
-                "trievium diagnostics: shortcut field focus={}",
-                field.has_focus()
-            );
-            self.input_has_focus = Some(field.has_focus());
-        }
-        if field.changed() {
-            self.accept_typed();
-        }
-        // Keep the normal picker entirely free of instructions and status
-        // chatter. Only actionable clipboard failures warrant an extra line.
-        if let Some(error) = &self.error {
-            ui.colored_label(Appearance::error_color(theme), error);
-        }
-        ui.separator();
+        egui::Frame::NONE
+            .inner_margin(egui::Margin::symmetric(18, 10))
+            .show(ui, |ui| {
+                let focused = ui.input(|input| input.focused);
+                if self.diagnose_input && self.last_focus != Some(focused) {
+                    eprintln!("trievium diagnostics: window focus={focused}");
+                    self.last_focus = Some(focused);
+                }
+                let (field, edit_clicked) = ui
+                    .horizontal(|ui| {
+                        ui.heading("Trievium");
+                        let field = ui.add(
+                            egui::TextEdit::singleline(&mut self.typed)
+                                .desired_width(92.0)
+                                .char_limit(4),
+                        );
+                        let edit_clicked = ui.button("Edit").clicked();
+                        (field, edit_clicked)
+                    })
+                    .inner;
+                if edit_clicked {
+                    self.open_manager(ui.ctx());
+                    return;
+                }
+                if !field.has_focus() {
+                    field.request_focus();
+                }
+                if self.diagnose_input && self.input_has_focus != Some(field.has_focus()) {
+                    eprintln!(
+                        "trievium diagnostics: shortcut field focus={}",
+                        field.has_focus()
+                    );
+                    self.input_has_focus = Some(field.has_focus());
+                }
+                if field.changed() {
+                    self.accept_typed();
+                }
+                if let Some(error) = &self.error {
+                    ui.colored_label(Appearance::error_color(theme), error);
+                }
+                ui.add_space(4.0);
+                ui.separator();
+                ui.add_space(3.0);
 
-        // Virtualize row painting, and rebuild the match list only when the
-        // typed prefix changes rather than re-sorting on every redraw.
-        let mut clicked = None;
-        egui::ScrollArea::vertical()
-            .auto_shrink([false, false])
-            .show_rows(ui, 39.0, self.visible.len(), |ui, rows| {
-                for row in rows {
-                    let index = self.visible[row];
-                    let entry = &self.config.entries[index];
-                    ui.horizontal(|ui| {
-                        let sequence = self.map.key(index);
-                        if ui
-                            .add_sized(
-                                [85.0, 31.0],
-                                egui::Button::new(
-                                    egui::RichText::new(sequence).monospace().strong(),
-                                ),
-                            )
-                            .clicked()
-                        {
-                            clicked = Some(index);
+                // Fixed compact row geometry. Never pair a 39px virtual row
+                // with a 50px+ button, separator and global item spacing.
+                let mut clicked = None;
+                egui::ScrollArea::vertical()
+                    .auto_shrink([false, false])
+                    .show_rows(ui, PICKER_ROW_HEIGHT, self.visible.len(), |ui, rows| {
+                        ui.spacing_mut().item_spacing.y = 0.0;
+                        for row in rows {
+                            let index = self.visible[row];
+                            let entry = &self.config.entries[index];
+                            egui::Frame::NONE
+                                .inner_margin(egui::Margin::symmetric(0, 4))
+                                .show(ui, |ui| {
+                                    ui.horizontal(|ui| {
+                                        let sequence = self.map.key(index).to_ascii_lowercase();
+                                        if ui
+                                            .add_sized(
+                                                [54.0, 24.0],
+                                                egui::Button::new(
+                                                    egui::RichText::new(sequence)
+                                                        .monospace()
+                                                        .strong(),
+                                                ),
+                                            )
+                                            .clicked()
+                                        {
+                                            clicked = Some(index);
+                                        }
+                                        if ui.selectable_label(false, &entry.label).clicked() {
+                                            clicked = Some(index);
+                                        }
+                                        let preview: String = entry
+                                            .text
+                                            .lines()
+                                            .next()
+                                            .unwrap_or("")
+                                            .chars()
+                                            .take(35)
+                                            .collect();
+                                        ui.label(egui::RichText::new(preview).weak().small());
+                                    });
+                                });
                         }
-                        if ui.selectable_label(false, &entry.label).clicked() {
-                            clicked = Some(index);
-                        }
-                        ui.add_space(5.0);
-                        let preview = entry.text.lines().next().unwrap_or("");
-                        let preview: String = preview.chars().take(45).collect();
-                        ui.label(egui::RichText::new(preview).weak().small());
                     });
-                    ui.separator();
+                if let Some(index) = clicked {
+                    self.select(index);
                 }
             });
-        if let Some(index) = clicked {
-            self.select(index);
-        }
     }
 }

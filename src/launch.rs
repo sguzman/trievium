@@ -12,6 +12,16 @@ pub enum Instance {
     Busy,
 }
 
+// Explicitly release the advisory lock before closing the descriptor.
+// This avoids relying on delayed descriptor teardown when the picker exits.
+impl Drop for Instance {
+    fn drop(&mut self) {
+        if let Self::Acquired(file) = self {
+            let _ = file.unlock();
+        }
+    }
+}
+
 pub fn acquire() -> Result<Option<Instance>> {
     let Some(dir) = std::env::var_os("XDG_RUNTIME_DIR").filter(|value| !value.is_empty()) else {
         return Ok(None);

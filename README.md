@@ -30,6 +30,22 @@ Replace the absolute path with your actual location. Choose a keybind that does 
 
 **Hyprland integration:** Trievium recognizes an active Hyprland session, waits briefly for its own window to map, then uses the Hyprland Lua dispatcher API to float, resize, center, raise above other windows, and focus **only its own process's window** (required for Hyprland 0.55+ Lua configurations). No compositor configuration edits or persistent rules are required. The integration runs once when opening, not continuously. On other compositors, Trievium relies on their default window-management behavior.
 
+## Appearance (system, light, dark)
+
+By default, Trievium follows the desktop's **light/dark preference** through the XDG Desktop Portal. When Darkman changes the system appearance at sunrise or sunset, Trievium follows that preference, including while the popup is open. The portal supplies the color scheme; Trievium does not need a location service, scheduler, or background daemon.
+
+Override it for a particular launch:
+
+```sh
+trievium --theme system
+trievium --theme light
+trievium --theme dark
+```
+
+Use the same flag with `./target/release/trievium` or in your Hyprland keybind. `--color-mode` is also accepted as an alias for `--theme`. The default is `system`; explicit `light` and `dark` ignore later system changes for that invocation.
+
+In system mode, a working appearance portal is required for Linux to report the preference. Without one, egui's dark fallback remains in effect. Both modes use the native egui widgets and an **opaque, theme-matched background**, so the popup remains legible in light mode rather than inheriting its old fixed dark background.
+
 ## Diagnosing missed shortcuts
 
 Run `trievium --diagnose-input` instead of `trievium` when a key is ignored. The popup displays a diagnostic-mode indicator and the launching terminal reports window focus, shortcut-field focus, normalized input length, selected shortcut, and clipboard success/failure. It does **not** print stored snippets or typed text contents. No diagnostic file is saved or uploaded. This flag is opt-in and does not affect ordinary launches.
@@ -83,6 +99,6 @@ See [architecture](docs/ARCHITECTURE.md) for algorithm details, constraints and 
 
 ## Status
 
-**v0.2.0 ongoing development:** file-backed plaintext selection, deterministic prefix-free assignment, CLI validation, native picker and Wayland clipboard. This is an initial implementation, **not yet personally dogfooded on Hyprland**. No tray, background service, editor, Lexwright importer, automated typing, or generalized actions yet. Keeping those out of the picker is intentional.
+**v0.3.0 ongoing development:** file-backed plaintext selection, deterministic prefix-free assignment, CLI validation, native picker and Wayland clipboard. This is an initial implementation, with the selection and clipboard lifecycle tested on Wayland and verified by local dogfooding. No tray, background service, editor, Lexwright importer, automated typing, or generalized actions yet. Keeping those out of the picker is intentional.
 
 MIT licensed; see [LICENSE](LICENSE).

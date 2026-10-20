@@ -10,6 +10,7 @@ Trievium is a single-process, on-demand selection UI: **keybind -> prefix-tree l
 - `trie.rs`: deterministic, prefix-free shortcut generation and lookup; no UI dependencies.
 - `shortcut_cache.rs`: per-configuration persistent mnemonic assignments, storing labels and keys only.
 - `clipboard.rs`: uses `wl-copy` via direct process arguments and piped input (no shell or quoting).
+- `appearance.rs`: system/light/dark policy, theme-aware colors and argument validation.
 - `input.rs`: focused shortcut-field text reducer, with terminal and invalid-prefix tests plus simulated egui input.
 - `launch.rs`: session-local advisory lock, preventing duplicate modal instances with no signals or process kills.
 - `hyprland.rs`: bounded, one-shot Hyprland window correction. Finds only a mapped `trievium` window belonging to the current process, then sets floating/size/focus and centers it. Does not touch global rules, workspaces, or other windows.
@@ -40,6 +41,12 @@ The picker attempts to obtain a session-local lock in `XDG_RUNTIME_DIR/trievium.
 ## Input troubleshooting
 
 `--diagnose-input` provides opt-in terminal diagnostics for window and focused-field state, prefix length, selected shortcut, and clipboard outcome. It never serializes expansion content or raw arbitrary text, and it does not persist logs. This is meant to tell apart compositor focus loss, ignored/modified events, invalid shortcut codes, and clipboard errors without further guessing. An attempted launch while another picker owns the session lock emits a message rather than silently exiting.
+
+## Appearance policy
+
+The default `--theme system` uses `portal_theme::follow` at eframe creation to read and watch the Linux XDG Desktop Portal `org.freedesktop.appearance` color-scheme. This integrates with desktop appearance services such as Darkman without independently calculating sunrise/sunset. A live portal update changes the egui theme and repaints the popup.
+
+`--theme light` and `--theme dark` set explicit egui theme preferences and do not start the portal follower. Theme-aware UI background and status colors replace previously hardcoded dark-only painting. On Linux without an appearance portal, the egui fallback remains dark. No additional daemon, account, permissions or private settings are introduced.
 
 ## Clipboard reliability
 

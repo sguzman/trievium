@@ -30,6 +30,13 @@ jobs:
           ./target/debug/trievium --version
           ./target/debug/trievium init --config "$config"
           ./target/debug/trievium validate --config "$config"
+          ./target/debug/trievium validate --config "$config" --theme light
+          ./target/debug/trievium validate --config "$config" --theme dark
+          ./target/debug/trievium validate --config "$config" --theme system
+          if ./target/debug/trievium validate --config "$config" --theme blue; then
+            echo "invalid theme unexpectedly accepted" >&2
+            exit 1
+          fi
           if ./target/debug/trievium init --config "$config"; then
             echo "init unexpectedly overwrote existing config" >&2
             exit 1

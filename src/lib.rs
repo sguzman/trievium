@@ -1,3 +1,4 @@
+pub mod appearance;
 pub mod clipboard;
 pub mod config;
 pub mod hyprland;

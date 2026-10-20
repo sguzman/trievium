@@ -2,6 +2,7 @@ use anyhow::{Context, Result, bail};
 use eframe::egui;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use trievium::appearance::Appearance;
 use trievium::clipboard::copy_text;
 use trievium::config::{self, Config};
 use trievium::hyprland;
@@ -21,11 +22,16 @@ fn run() -> Result<()> {
     let mut command = "pick".to_owned();
     let mut override_path = None;
     let mut diagnose_input = false;
+    let mut appearance = Appearance::default();
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "pick" | "init" | "validate" | "config-path" | "doctor" => command = arg,
             "--diagnose-input" => diagnose_input = true,
+            "--theme" | "--color-mode" => {
+                let mode = args.next().context("--theme requires system, light, or dark")?;
+                appearance = mode.parse()?;
+            }
             "--config" => {
                 override_path = Some(PathBuf::from(
                     args.next().context("--config requires a path")?,
@@ -37,7 +43,7 @@ fn run() -> Result<()> {
             }
             "--help" | "-h" => {
                 println!(
-                    "Trievium - keyboard-first text selection\n\nUsage: trievium [pick|init|validate|config-path|doctor] [--config PATH] [--diagnose-input]\n\nDefault: pick. Keys are automatically assigned unless pinned in the JSON config."
+                    "Trievium - keyboard-first text selection\n\nUsage: trievium [pick|init|validate|config-path|doctor] [--config PATH] [--theme system|light|dark] [--diagnose-input]\n\nDefault: pick, with --theme system. Keys are automatically assigned unless pinned in the JSON config."
                 );
                 return Ok(());
             }
@@ -131,7 +137,10 @@ fn run() -> Result<()> {
             eframe::run_native(
                 "trievium",
                 native,
-                Box::new(move |_cc| Ok(Box::new(picker))),
+                Box::new(move |cc| {
+                    appearance.configure(&cc.egui_ctx);
+                    Ok(Box::new(picker))
+                }),
             )
             .map_err(|err| anyhow::anyhow!("Cannot launch picker: {err}"))?;
         }
@@ -275,10 +284,14 @@ impl Picker {
 
 impl eframe::App for Picker {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        // Trievium must be a fully painted interactive window rather than
-        // a translucent-looking overlay of the launching terminal.
-        ui.painter()
-            .rect_filled(ui.max_rect(), 0.0, egui::Color32::from_rgb(20, 24, 30));
+        // Paint an opaque surface in both modes. The original fixed dark
+        // fill made egui's light theme unreadable.
+        let theme = ui.ctx().theme();
+        ui.painter().rect_filled(
+            ui.max_rect(),
+            0.0,
+            Appearance::background(theme),
+        );
         let focused = ui.input(|input| input.focused);
         if self.diagnose_input && self.last_focus != Some(focused) {
             eprintln!("trievium diagnostics: window focus={focused}");
@@ -325,7 +338,7 @@ impl eframe::App for Picker {
         ui.add_space(5.0);
         if !ui.input(|input| input.focused) {
             ui.colored_label(
-                egui::Color32::from_rgb(240, 168, 90),
+                Appearance::warning_color(theme),
                 "Waiting for keyboard focus from the compositor...",
             );
         }
@@ -342,7 +355,7 @@ impl eframe::App for Picker {
         };
         ui.label(egui::RichText::new(prompt).size(17.0).strong());
         if let Some(error) = &self.error {
-            ui.colored_label(egui::Color32::from_rgb(240, 126, 126), error);
+            ui.colored_label(Appearance::error_color(theme), error);
         } else {
             ui.label(
                 egui::RichText::new("A complete sequence copies immediately and closes.")

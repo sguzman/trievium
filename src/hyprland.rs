@@ -126,7 +126,10 @@ fn active_window_address(bytes: &[u8]) -> Option<String> {
 }
 
 fn is_active_window(address: &str) -> bool {
-    let Ok(output) = Command::new("hyprctl").args(["-j", "activewindow"]).output() else {
+    let Ok(output) = Command::new("hyprctl")
+        .args(["-j", "activewindow"])
+        .output()
+    else {
         return false;
     };
     output.status.success() && active_window_address(&output.stdout).as_deref() == Some(address)
@@ -148,7 +151,9 @@ fn confirm_popup_focus(address: &str) -> Result<(), String> {
     if is_active_window(address) {
         return Ok(());
     }
-    Err(format!("Hyprland did not focus Trievium window {address} after startup"))
+    Err(format!(
+        "Hyprland did not focus Trievium window {address} after startup"
+    ))
 }
 
 #[cfg(test)]

@@ -60,14 +60,16 @@ pub fn classify_key(event: &Event) -> InputAction {
     }
 }
 
-
 /// Process key-down events if present; if a platform only reports text
 /// events, use single-letter text as a fallback. Never synthesize text from
 /// pasted or multi-character values. The caller remembers whether the native
 /// key event path has ever worked, preventing a duplicate Text from being
 /// consumed in a subsequent frame.
 pub fn actions(events: &[Event], key_events_observed: &mut bool) -> Vec<InputAction> {
-    if events.iter().any(|event| matches!(event, Event::Key { pressed: true, .. })) {
+    if events
+        .iter()
+        .any(|event| matches!(event, Event::Key { pressed: true, .. }))
+    {
         *key_events_observed = true;
     }
     if *key_events_observed {
@@ -82,9 +84,9 @@ pub fn actions(events: &[Event], key_events_observed: &mut bool) -> Vec<InputAct
             .filter_map(|event| match event {
                 Event::Text(text) if text.len() == 1 => {
                     let letter = text.as_bytes()[0];
-                    letter.is_ascii_alphabetic().then_some(InputAction::Letter(
-                        char::from(letter.to_ascii_uppercase()),
-                    ))
+                    letter
+                        .is_ascii_alphabetic()
+                        .then_some(InputAction::Letter(char::from(letter.to_ascii_uppercase())))
                 }
                 _ => None,
             })
@@ -204,7 +206,10 @@ mod tests {
             event(Key::A, Modifiers::NONE, false),
             Event::Text("a".into()),
         ];
-        assert_eq!(actions(&first, &mut observed), vec![InputAction::Letter('A')]);
+        assert_eq!(
+            actions(&first, &mut observed),
+            vec![InputAction::Letter('A')]
+        );
         assert!(observed);
         assert!(actions(&[Event::Text("a".into())], &mut observed).is_empty());
         let combo = vec![

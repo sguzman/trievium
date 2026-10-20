@@ -26,7 +26,9 @@ A Hyprland binding can then launch the compiled executable, for example:
 bind = SUPER, P, exec, /absolute/path/to/trievium/target/release/trievium
 ```
 
-Replace the absolute path with your actual location. Choose a keybind that does not conflict with your existing binds. The picker must receive keyboard focus; if your Hyprland rules prevent focus or tile small windows, configure a float/focus rule for the `trievium` app class in your existing local Hyprland config (do not blindly replace unrelated rules).
+Replace the absolute path with your actual location. Choose a keybind that does not conflict with your existing binds.
+
+**Hyprland integration:** Trievium recognizes an active Hyprland session, waits briefly for its own window to map, then uses `hyprctl` to float, resize, center and focus **only its own process's window**. No compositor configuration edits or persistent rules are required. The integration runs once when opening, not continuously. On other compositors, Trievium relies on their default window-management behavior.
 
 ## Preflight and compiled Linux builds
 
@@ -43,6 +45,7 @@ CI also produces a packaged Linux x86_64 binary from each successful run. Open t
 - Clicking a row or its key badge also copies and exits.
 - The popup sizes itself to the entry count (up to a maximum), shows remaining key choices, and virtualizes long lists for responsive scrolling.
 - A session-local advisory lock prevents repeated hotkey presses opening multiple windows; no existing process is terminated. If `XDG_RUNTIME_DIR` is absent, locking is skipped.
+- On Hyprland, the picker floats and requests focus automatically; no manual click should be needed before typing.
 - A failed clipboard operation displays an error, clears the terminal sequence for retry, and **does not exit**.
 - `wl-copy` runs without `--foreground`, leaving clipboard ownership alive after the UI exits. Paste normally into the previous application.
 - Headless CI verifies Unicode and multiline bytes through the same subprocess boundary using a local file writer; it does not simulate a real Wayland clipboard.

@@ -12,6 +12,7 @@ Trievium is a single-process, on-demand selection UI: **keybind -> prefix-tree l
 - `clipboard.rs`: uses `wl-copy` via direct process arguments and piped input (no shell or quoting).
 - `input.rs`: pure shortcut-input state machine and key-event classifier, with tests for modifier suppression, repeats and invalid prefixes.
 - `launch.rs`: session-local advisory lock, preventing duplicate modal instances with no signals or process kills.
+- `hyprland.rs`: bounded, one-shot Hyprland window correction. Finds only a mapped `trievium` window belonging to the current process, then sets floating/size/focus and centers it. Does not touch global rules, workspaces, or other windows.
 - `main.rs`: small CLI (including read-only `doctor`) and focused egui picker.
 
 Config is read once at launch, without a watcher, daemon, or network calls. The keyboard consumes egui key-down events rather than text events, so OS key-repeat and Ctrl/Alt/Super combinations cannot select items unintentionally. Failed clipboard operations reset the prefix for a safe retry. The visible-match list and next-letter hints are recomputed on prefix changes, not on every UI redraw. For now, changes take effect on the next invocation.
@@ -29,6 +30,8 @@ This is not an optimal coding algorithm; it favors predictable mnemonic choices 
 The number of supported entries is capped at 10000 for UI practicality; the theoretical 4-character alphabet has 26^4 leaves. This is not a keyboard-layout localization system yet; typed input is intentionally ASCII.
 
 ## Linux launch and preflight
+
+Hyprland normally tiles Wayland top-level windows. If `HYPRLAND_INSTANCE_SIGNATURE` is present, the picker uses a short-lived helper thread that waits up to two seconds for the newly mapped client to appear in `hyprctl -j clients`. It verifies both PID and exact app class before using any dispatcher, then floats/resizes/focuses that window by its unique address. Centering uses `centerwindow` only after checking that the active address is still the picker's. It never modifies configuration and never terminates other processes.
 
 The picker attempts to obtain a session-local lock in `XDG_RUNTIME_DIR/trievium.lock`. The file descriptor stays alive throughout the picker window lifetime, and the kernel releases its lock on exit. A second invocation simply exits instead of opening overlapping windows. No signals or process kills. If the runtime directory variable is not provided, the guard is omitted instead of preventing launch.
 

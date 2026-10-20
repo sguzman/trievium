@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use trievium::clipboard::copy_text;
 use trievium::config::{self, Config};
+use trievium::hyprland;
 use trievium::input::{InputAction, Selection, classify_key};
 use trievium::launch::{self, Instance};
 use trievium::shortcut_cache;
@@ -99,6 +100,10 @@ fn run() -> Result<()> {
                     .with_decorations(false),
                 ..Default::default()
             };
+            // Hyprland otherwise places a normal Wayland toplevel in the
+            // tiling layout. Correct only this process's mapped window, and
+            // do it asynchronously so the first egui frame is not blocked.
+            hyprland::focus_new_popup(560, window_height.round() as i32);
             eframe::run_native(
                 "trievium",
                 native,

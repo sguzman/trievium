@@ -28,9 +28,8 @@ fn focus_when_mapped(pid: u32, width: i32, height: i32) {
                 eprintln!("trievium: could not configure Hyprland popup: {error}");
                 return;
             }
-            // A successful dispatcher response only means the command was
-            // accepted. Verify that the compositor really focused this
-            // window. Retry briefly during the initial mapping transition.
+            // Initial focus may lag mapping slightly. Retry at most once,
+            // never continually reclaim the keyboard or warp the pointer.
             if let Err(error) = confirm_popup_focus(&address) {
                 eprintln!("trievium: {error}");
             }
@@ -138,32 +137,48 @@ fn is_active_window(address: &str) -> bool {
     output.status.success() && active_window_address(&output.stdout).as_deref() == Some(address)
 }
 
-/// Compositor mapping has a settling period. Previously we returned
-/// after the *first* observed focus success, even if focus reverted to the
-/// launching terminal milliseconds later. Watch a short, bounded interval
-/// after mapping, correcting only our own window's focus. This is NOT a
-/// perpetual focus-stealing thread.
+/// Focus is a one-time launch action. The old three-second focus loop
+/// repeatedly took the user's pointer away from clicks in the editor.
 fn confirm_popup_focus(address: &str) -> Result<(), String> {
     if !valid_address(address) {
         return Err("invalid popup address".into());
     }
-    let focus = format!("hl.dsp.focus({{ window = \"address:{address}\" }})");
-    let mut observed_focus = false;
-    for _ in 0..24 {
-        if is_active_window(address) {
-            observed_focus = true;
-        } else {
-            dispatch_lua(&focus)?;
-        }
-        thread::sleep(Duration::from_millis(125));
-    }
+    // A single short settling delay allows a newly mapped surface to become
+    // active. Never take focus back after the user has clicked elsewhere.
+    thread::sleep(Duration::from_millis(100));
     if is_active_window(address) {
-        Ok(())
-    } else if observed_focus {
-        Err("Trievium window lost focus during startup".into())
-    } else {
-        Err("Hyprland never focused Trievium during startup".into())
+        return Ok(());
     }
+    let focus = format!("hl.dsp.focus({{ window = \"address:{address}\" }})");
+    dispatch_lua(&focus)
+}
+
+/// Resize an already mapped Trievium window when switching from the small
+/// picker to the editor and back. Only window geometry changes here: no
+/// focus commands, cursor movement, or global compositor configuration.
+pub fn resize_own_popup(width: i32, height: i32) {
+    if std::env::var_os("HYPRLAND_INSTANCE_SIGNATURE").is_none_or(|s| s.is_empty()) {
+        return;
+    }
+    if width <= 0 || height <= 0 {
+        return;
+    }
+    let pid = std::process::id();
+    thread::spawn(move || {
+        if let Some(address) = our_window_address(pid) {
+            let selector = format!("address:{address}");
+            if let Err(error) = dispatch_lua(&format!(
+                "hl.dsp.window.resize({{ window = \"{selector}\", x = {width}, y = {height} }})"
+            )) {
+                eprintln!("trievium: editor resize: {error}");
+            }
+            if let Err(error) = dispatch_lua(&format!(
+                "hl.dsp.window.center({{ window = \"{selector}\" }})"
+            )) {
+                eprintln!("trievium: editor centering: {error}");
+            }
+        }
+    });
 }
 
 #[cfg(test)]

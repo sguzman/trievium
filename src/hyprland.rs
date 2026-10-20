@@ -52,10 +52,7 @@ fn find_our_window(bytes: &[u8], pid: u32) -> Option<String> {
         let class = client.get("class")?.as_str()?;
         let mapped = client.get("mapped")?.as_bool()?;
         let address = client.get("address")?.as_str()?;
-        if candidate_pid == u64::from(pid)
-            && class == APP_CLASS
-            && mapped
-            && valid_address(address)
+        if candidate_pid == u64::from(pid) && class == APP_CLASS && mapped && valid_address(address)
         {
             Some(address.to_owned())
         } else {

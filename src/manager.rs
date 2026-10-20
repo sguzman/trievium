@@ -39,6 +39,7 @@ impl EntryForm {
 pub enum ManagerAction {
     Stay,
     Back,
+    Exit,
 }
 
 pub struct Manager {
@@ -138,98 +139,52 @@ impl Manager {
         self.commit(replacement, None)
     }
 
+    /// Keep the primary actions at the top so they are available even if a
+    /// compositor ignores the requested editor resize.
     pub fn ui(&mut self, ui: &mut egui::Ui) -> ManagerAction {
-        let mut back = false;
-        ui.horizontal(|ui| {
-            ui.heading("Trievium");
-            ui.separator();
-            ui.label("Entries");
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.button("Done").clicked() {
-                    if self.dirty() {
-                        self.error =
-                            Some("Unsaved changes. Save or discard before leaving.".into());
-                    } else {
-                        back = true;
-                    }
-                }
-            });
-        });
-        ui.separator();
-
-        let mut change_selection: Option<Option<usize>> = None;
-        ui.horizontal(|ui| {
-            ui.vertical(|ui| {
-                ui.set_min_width(235.0);
-                ui.set_max_width(235.0);
-                if ui.button("+ New").clicked() {
-                    change_selection = Some(None);
-                }
-                ui.separator();
-                egui::ScrollArea::vertical()
-                    .id_salt("manager_entries")
-                    .max_height(445.0)
-                    .show(ui, |ui| {
-                        for (index, entry) in self.config.entries.iter().enumerate() {
-                            let label = format!("{}   {}", self.map.key(index), entry.label);
-                            if ui
-                                .selectable_label(self.selected == Some(index), label)
-                                .clicked()
-                            {
-                                change_selection = Some(Some(index));
+        let mut action = ManagerAction::Stay;
+        egui::Frame::NONE
+            .inner_margin(egui::Margin::same(18))
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.heading("Trievium");
+                    ui.label(egui::RichText::new("Entries").weak());
+                    ui.with_layout(
+                        egui::Layout::right_to_left(egui::Align::Center),
+                        |ui| {
+                            if ui.button("Close").clicked() {
+                                action = ManagerAction::Exit;
                             }
+                            // Done must NEVER trap the user. Saved changes
+                            // remain on disk; unsaved form edits are discarded.
+                            if ui.button("Done").clicked() {
+                                action = ManagerAction::Back;
+                            }
+                        },
+                    );
+                });
+                ui.add_space(10.0);
+                ui.horizontal_wrapped(|ui| {
+                    if ui.button("+ New").clicked() {
+                        if self.dirty() {
+                            self.error = Some("Save or discard the current edits first.".into());
+                        } else {
+                            self.select(None);
                         }
-                    });
-            });
-            ui.separator();
-            ui.vertical(|ui| {
-                ui.set_min_width(390.0);
-                ui.heading(if self.selected.is_some() {
-                    "Edit entry"
-                } else {
-                    "New entry"
-                });
-                ui.label("Name");
-                ui.add(
-                    egui::TextEdit::singleline(&mut self.form.label).desired_width(f32::INFINITY),
-                );
-                ui.label("Text to copy");
-                ui.add(
-                    egui::TextEdit::multiline(&mut self.form.text)
-                        .desired_rows(9)
-                        .desired_width(f32::INFINITY),
-                );
-                ui.horizontal(|ui| {
-                    ui.vertical(|ui| {
-                        ui.label("Pinned shortcut (optional)");
-                        ui.add(
-                            egui::TextEdit::singleline(&mut self.form.key)
-                                .desired_width(120.0)
-                                .char_limit(4),
-                        );
-                    });
-                    ui.vertical(|ui| {
-                        ui.label("Automatic priority");
-                        ui.add(egui::DragValue::new(&mut self.form.priority));
-                    });
-                });
-                ui.add_space(8.0);
-                ui.horizontal(|ui| {
+                    }
                     if ui.button("Save").clicked()
                         && let Err(error) = self.save_form()
                     {
                         self.error = Some(format!("{error:#}"));
                         self.message = None;
                     }
-                    if ui.button("Discard changes").clicked() {
+                    if ui.button("Discard").clicked() {
                         self.select(self.selected);
                     }
                     if self.selected.is_some() && ui.button("Delete").clicked() {
                         self.confirm_delete = true;
                     }
-                });
-                if self.confirm_delete {
-                    ui.horizontal(|ui| {
+                    if self.confirm_delete {
                         ui.label("Delete this entry?");
                         if ui.button("Confirm delete").clicked()
                             && let Err(error) = self.delete_entry()
@@ -239,29 +194,116 @@ impl Manager {
                         if ui.button("Cancel").clicked() {
                             self.confirm_delete = false;
                         }
-                    });
-                }
-                if let Some(message) = &self.message {
-                    ui.label(message);
-                }
+                    }
+                });
                 if let Some(error) = &self.error {
                     ui.colored_label(ui.visuals().error_fg_color, error);
+                } else if let Some(message) = &self.message {
+                    ui.label(message);
+                }
+                ui.add_space(12.0);
+                ui.separator();
+                ui.add_space(10.0);
+
+                // Both narrow and fully resized layouts must remain usable.
+                // A vertical scroll view is critical for the initial 560x175
+                // picker surface before Hyprland applies the resize.
+                egui::ScrollArea::vertical()
+                    .id_salt("manager_body")
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                        let mut change_selection = None;
+                        if ui.available_width() >= 675.0 {
+                            ui.horizontal(|ui| {
+                                ui.vertical(|ui| {
+                                    ui.set_width(210.0);
+                                    self.entry_list(ui, &mut change_selection);
+                                });
+                                ui.add_space(12.0);
+                                ui.separator();
+                                ui.add_space(12.0);
+                                ui.vertical(|ui| {
+                                    ui.set_min_width(380.0);
+                                    self.entry_fields(ui);
+                                });
+                            });
+                        } else {
+                            // Side-by-side min-width columns previously
+                            // overflowed to the right, hiding the form.
+                            self.entry_list(ui, &mut change_selection);
+                            ui.add_space(14.0);
+                            ui.separator();
+                            ui.add_space(14.0);
+                            self.entry_fields(ui);
+                        }
+                        if let Some(index) = change_selection {
+                            if self.dirty() {
+                                self.error = Some("Save or discard current edits first.".into());
+                            } else {
+                                self.select(Some(index));
+                            }
+                        }
+                    });
+            });
+        action
+    }
+
+    fn entry_list(&mut self, ui: &mut egui::Ui, change: &mut Option<usize>) {
+        ui.label(egui::RichText::new("LIBRARY").small().strong());
+        ui.add_space(8.0);
+        egui::ScrollArea::vertical()
+            .id_salt("manager_entries")
+            .max_height(190.0)
+            .show(ui, |ui| {
+                for (index, entry) in self.config.entries.iter().enumerate() {
+                    let label = format!("{}    {}", self.map.key(index), entry.label);
+                    if ui
+                        .selectable_label(self.selected == Some(index), label)
+                        .clicked()
+                    {
+                        *change = Some(index);
+                    }
                 }
             });
-        });
-        if let Some(selection) = change_selection {
-            if self.dirty() {
-                self.error = Some("Unsaved changes. Save or discard them first.".into());
-            } else {
-                self.select(selection);
-            }
-        }
-        if back {
-            ManagerAction::Back
-        } else {
-            ManagerAction::Stay
-        }
     }
+
+    fn entry_fields(&mut self, ui: &mut egui::Ui) {
+        ui.heading(if self.selected.is_some() {
+            "Edit entry"
+        } else {
+            "New entry"
+        });
+        ui.add_space(10.0);
+        ui.label("Name");
+        ui.add(
+            egui::TextEdit::singleline(&mut self.form.label)
+                .desired_width(f32::INFINITY),
+        );
+        ui.add_space(10.0);
+        ui.label("Text to copy");
+        ui.add(
+            egui::TextEdit::multiline(&mut self.form.text)
+                .desired_rows(8)
+                .desired_width(f32::INFINITY),
+        );
+        ui.add_space(12.0);
+        ui.horizontal_wrapped(|ui| {
+            ui.vertical(|ui| {
+                ui.label("Pinned shortcut");
+                ui.add(
+                    egui::TextEdit::singleline(&mut self.form.key)
+                        .desired_width(125.0)
+                        .char_limit(4),
+                );
+            });
+            ui.add_space(18.0);
+            ui.vertical(|ui| {
+                ui.label("Automatic priority");
+                ui.add(egui::DragValue::new(&mut self.form.priority));
+            });
+        });
+    }
+
 }
 
 #[cfg(test)]
@@ -319,6 +361,20 @@ mod tests {
         mgr.select(Some(0));
         mgr.delete_entry().unwrap();
         assert!(Config::load(&path).unwrap().entries.is_empty());
+        fs::remove_dir_all(path.parent().unwrap()).unwrap();
+    }
+
+    #[test]
+    fn done_and_close_are_always_available_when_form_is_dirty() {
+        // Verify the policy independently of the native window: unsaved data
+        // is not persisted just because the form is edited.
+        let (path, cache, config, map) = temp_config();
+        let mut manager = Manager::new(path.clone(), cache, config, map).unwrap();
+        manager.form.label = "Unsaved".into();
+        assert!(manager.dirty());
+        assert_eq!(Config::load(&path).unwrap().entries[0].label, "Greeting");
+        manager.select(None);
+        assert!(!manager.dirty());
         fs::remove_dir_all(path.parent().unwrap()).unwrap();
     }
 

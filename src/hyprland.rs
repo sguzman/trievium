@@ -189,7 +189,7 @@ hl = {
 }
 "#;
         for expression in popup_dispatchers("0xabc123", 560, 420).unwrap() {
-            let script = format!("{prelude}\\nhl.dispatch({expression})");
+            let script = format!("{prelude}\nhl.dispatch({expression})");
             let output = Command::new(interpreter).args(["-e", &script]).output().unwrap();
             assert!(
                 output.status.success(),

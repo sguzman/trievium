@@ -97,4 +97,58 @@ if [[ "$copied" != "Hello!" ]]; then
   cat "$XDG_RUNTIME_DIR/trievium.log" "$XDG_RUNTIME_DIR/virtual-keyboard.log" >&2
   exit 1
 fi
-echo "Wayland E2E passed: G copied Hello!"
+# Clipboard success alone is insufficient: the original regression left
+# a popup alive after a completed selection. Require the one-shot process to
+# terminate before relaunching with a different key.
+wait_for_picker_exit() {
+  local state=""
+  for _ in $(seq 1 70); do
+    state=$(ps -o stat= -p "$picker_pid" 2>/dev/null | tr -d '[:space:]' || true)
+    if [[ -z "$state" || "$state" == Z* ]]; then
+      wait "$picker_pid"
+      picker_pid=""
+      return 0
+    fi
+    sleep 0.1
+  done
+  echo "Trievium copied text but did not exit" >&2
+  cat "$XDG_RUNTIME_DIR/trievium.log" >&2
+  return 1
+}
+wait_for_picker_exit
+
+# Relaunch from the same session to catch focus handoff and stale single-
+# instance-lock bugs. The next key must copy a *different* entry and exit.
+./target/debug/trievium --config "$config" --diagnose-input >"$XDG_RUNTIME_DIR/trievium-second.log" 2>&1 &
+picker_pid=$!
+found=""
+for _ in $(seq 1 100); do
+  found=$(swaymsg -s "$sway_sock" -t get_tree | grep -o '"app_id": "trievium"' | head -1 || true)
+  if [[ -n "$found" ]]; then
+    break
+  fi
+  sleep 0.1
+done
+if [[ -z "$found" ]]; then
+  echo "Second picker did not map after first selection" >&2
+  cat "$XDG_RUNTIME_DIR/trievium-second.log" >&2
+  exit 1
+fi
+swaymsg -s "$sway_sock" '[app_id="trievium"] focus'
+sleep 0.3
+wtype c
+copied=""
+for _ in $(seq 1 70); do
+  copied=$(wl-paste -n 2>/dev/null || true)
+  if [[ "$copied" == "Best regards," ]]; then
+    break
+  fi
+  sleep 0.1
+done
+if [[ "$copied" != "Best regards," ]]; then
+  echo "Second Wayland picker did not select C" >&2
+  cat "$XDG_RUNTIME_DIR/trievium-second.log" >&2
+  exit 1
+fi
+wait_for_picker_exit
+echo "Wayland E2E passed: G and C copied different payloads, and both pickers exited."

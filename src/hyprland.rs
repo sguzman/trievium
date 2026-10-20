@@ -80,7 +80,7 @@ fn valid_address(address: &str) -> bool {
 ///
 /// Do not use an activewindow selector: every action targets Trievium's
 /// verified window address, including centering and focus.
-fn popup_dispatchers(address: &str, width: i32, height: i32) -> Result<[String; 4], String> {
+fn popup_dispatchers(address: &str, width: i32, height: i32) -> Result<[String; 5], String> {
     if !valid_address(address) {
         return Err("refusing invalid Hyprland window address".into());
     }
@@ -92,6 +92,9 @@ fn popup_dispatchers(address: &str, width: i32, height: i32) -> Result<[String; 
         format!("hl.dsp.window.float({{ window = \"{selector}\", action = \"enable\" }})"),
         format!("hl.dsp.window.resize({{ window = \"{selector}\", x = {width}, y = {height} }})"),
         format!("hl.dsp.window.center({{ window = \"{selector}\" }})"),
+        // A newly floated window can remain below the originating tiled
+        // window. Raise it before focusing, otherwise clicks hit the terminal.
+        format!("hl.dsp.window.alter_zorder({{ window = \"{selector}\", mode = \"top\" }})"),
         format!("hl.dsp.focus({{ window = \"{selector}\" }})"),
     ])
 }
@@ -212,6 +215,7 @@ mod tests {
                 "hl.dsp.window.float({ window = \"address:0xabc123\", action = \"enable\" })",
                 "hl.dsp.window.resize({ window = \"address:0xabc123\", x = 560, y = 420 })",
                 "hl.dsp.window.center({ window = \"address:0xabc123\" })",
+                "hl.dsp.window.alter_zorder({ window = \"address:0xabc123\", mode = \"top\" })",
                 "hl.dsp.focus({ window = \"address:0xabc123\" })",
             ]
         );
@@ -240,6 +244,7 @@ hl = {
             float = function(t) assert(t.action == "enable"); return selected(t) end,
             resize = function(t) assert(t.x == 560 and t.y == 420); return selected(t) end,
             center = selected,
+            alter_zorder = function(t) assert(t.mode == "top"); return selected(t) end,
         },
         focus = selected,
     },

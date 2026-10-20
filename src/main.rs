@@ -327,7 +327,7 @@ impl eframe::App for Picker {
             .map(|ch| ch.to_string())
             .collect::<Vec<_>>()
             .join("  ");
-        let prompt = if self.typed.as_str().is_empty() {
+        let prompt = if self.typed.is_empty() {
             format!("Press one of: {choices}")
         } else {
             format!("Sequence: {}   Next: {choices}", self.typed.as_str())
@@ -344,7 +344,7 @@ impl eframe::App for Picker {
         }
         ui.separator();
 
-        if self.typed.as_str().is_empty() {
+        if self.typed.is_empty() {
             ui.label(
                 egui::RichText::new(format!("{} entries", self.visible.len()))
                     .small()

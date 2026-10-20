@@ -178,7 +178,9 @@ fn run() -> Result<()> {
 const PICKER_ROW_HEIGHT: f32 = 32.0;
 
 fn picker_height(entries: usize) -> f32 {
-    (74.0 + entries.min(9) as f32 * PICKER_ROW_HEIGHT).clamp(140.0, 380.0)
+    // Account for egui's title row, panel margins, header separator and
+    // outer padding in addition to the fixed virtual-row height.
+    (96.0 + entries.min(9) as f32 * PICKER_ROW_HEIGHT).clamp(175.0, 420.0)
 }
 
 /// On Hyprland a floating window's geometry belongs to the compositor.

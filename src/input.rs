@@ -82,13 +82,14 @@ mod tests {
     fn native_egui_focused_text_edit_consumes_keyboard_input() {
         let ctx = eframe::egui::Context::default();
         let mut input = String::new();
-        let _ = ctx.run_ui(Default::default(), |ctx| {
+        let mut first = ctx.run_ui(Default::default(), |ctx| {
             eframe::egui::CentralPanel::default().show(ctx, |ui| {
                 ui.add(eframe::egui::TextEdit::singleline(&mut input))
                     .request_focus();
             });
         });
-        let _ = ctx.run_ui(
+        first.textures_delta.clear();
+        let mut second = ctx.run_ui(
             eframe::egui::RawInput {
                 events: vec![eframe::egui::Event::Text("G".into())],
                 ..Default::default()
@@ -99,6 +100,7 @@ mod tests {
                 });
             },
         );
+        second.textures_delta.clear();
         assert_eq!(input, "G");
     }
 }

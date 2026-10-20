@@ -92,12 +92,18 @@ pub fn save_atomic(path: &Path, config: &Config, expected_file: &[u8]) -> Result
     let current = fs::read(path)
         .with_context(|| format!("Reading existing configuration {}", path.display()))?;
     if current != expected_file {
-        bail!("Configuration changed on disk. Reopen the editor to avoid overwriting external changes.");
+        bail!(
+            "Configuration changed on disk. Reopen the editor to avoid overwriting external changes."
+        );
     }
     let mut content = serde_json::to_vec_pretty(config)?;
     content.push(b'\n');
-    let parent = path.parent().context("Configuration path has no parent directory")?;
-    let name = path.file_name().context("Configuration path has no filename")?;
+    let parent = path
+        .parent()
+        .context("Configuration path has no parent directory")?;
+    let name = path
+        .file_name()
+        .context("Configuration path has no filename")?;
     let mut options = fs::OpenOptions::new();
     options.write(true).create_new(true);
     #[cfg(unix)]
@@ -146,7 +152,13 @@ pub fn save_atomic(path: &Path, config: &Config, expected_file: &[u8]) -> Result
 
 /// Initialize a completely empty library for first-time GUI users.
 pub fn initialize_empty(path: &Path) -> Result<()> {
-    create_new_config(path, &Config { version: 1, entries: Vec::new() })
+    create_new_config(
+        path,
+        &Config {
+            version: 1,
+            entries: Vec::new(),
+        },
+    )
 }
 
 pub fn initialize(path: &Path) -> Result<()> {
@@ -187,7 +199,10 @@ pub fn initialize(path: &Path) -> Result<()> {
 
 fn create_new_config(path: &Path, config: &Config) -> Result<()> {
     if path.exists() {
-        bail!("Refusing to overwrite existing configuration: {}", path.display());
+        bail!(
+            "Refusing to overwrite existing configuration: {}",
+            path.display()
+        );
     }
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).with_context(|| format!("Creating {}", parent.display()))?;
@@ -215,7 +230,8 @@ mod tests {
 
     #[test]
     fn first_launch_creates_empty_collection_without_samples() {
-        let root = std::env::temp_dir().join(format!("trievium-new-library-{}", std::process::id()));
+        let root =
+            std::env::temp_dir().join(format!("trievium-new-library-{}", std::process::id()));
         let path = root.join("nested/items.json");
         initialize_empty(&path).unwrap();
         assert_eq!(Config::load(&path).unwrap().entries.len(), 0);
@@ -225,7 +241,10 @@ mod tests {
 
     #[test]
     fn accepts_empty_collection_for_in_app_management() {
-        let c = Config { version: 1, entries: vec![] };
+        let c = Config {
+            version: 1,
+            entries: vec![],
+        };
         c.validate().unwrap();
     }
 
@@ -245,7 +264,10 @@ mod tests {
         };
         let initial = serde_json::to_vec(&first).unwrap();
         std::fs::write(&path, &initial).unwrap();
-        let updated = Config { version: 1, entries: vec![] };
+        let updated = Config {
+            version: 1,
+            entries: vec![],
+        };
         let bytes = save_atomic(&path, &updated, &initial).unwrap();
         assert_eq!(std::fs::read(&path).unwrap(), bytes);
         assert_eq!(Config::load(&path).unwrap().entries.len(), 0);

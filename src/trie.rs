@@ -73,7 +73,10 @@ impl Keymap {
         previous: &BTreeMap<String, String>,
     ) -> Result<Self> {
         if entries.is_empty() {
-            return Ok(Self { root: Node::default(), keys: Vec::new() });
+            return Ok(Self {
+                root: Node::default(),
+                keys: Vec::new(),
+            });
         }
         let mut root = Node::default();
         let mut keys = vec![String::new(); entries.len()];

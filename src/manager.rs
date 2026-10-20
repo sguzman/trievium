@@ -56,8 +56,7 @@ pub struct Manager {
 
 impl Manager {
     pub fn new(path: PathBuf, cache_path: PathBuf, config: Config, map: Keymap) -> Result<Self> {
-        let original = fs::read(&path)
-            .with_context(|| format!("Reading {}", path.display()))?;
+        let original = fs::read(&path).with_context(|| format!("Reading {}", path.display()))?;
         Ok(Self {
             path,
             cache_path,
@@ -97,7 +96,10 @@ impl Manager {
     /// local files, and the original configuration is not changed in memory.
     fn commit(&mut self, replacement: Config, next_selected: Option<usize>) -> Result<()> {
         replacement.validate()?;
-        let previous: BTreeMap<String, String> = self.config.entries.iter()
+        let previous: BTreeMap<String, String> = self
+            .config
+            .entries
+            .iter()
             .enumerate()
             .map(|(i, entry)| (entry.label.clone(), self.map.key(i).to_owned()))
             .collect();
@@ -145,7 +147,8 @@ impl Manager {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if ui.button("Done").clicked() {
                     if self.dirty() {
-                        self.error = Some("Unsaved changes. Save or discard before leaving.".into());
+                        self.error =
+                            Some("Unsaved changes. Save or discard before leaving.".into());
                     } else {
                         back = true;
                     }
@@ -169,7 +172,10 @@ impl Manager {
                     .show(ui, |ui| {
                         for (index, entry) in self.config.entries.iter().enumerate() {
                             let label = format!("{}   {}", self.map.key(index), entry.label);
-                            if ui.selectable_label(self.selected == Some(index), label).clicked() {
+                            if ui
+                                .selectable_label(self.selected == Some(index), label)
+                                .clicked()
+                            {
                                 change_selection = Some(Some(index));
                             }
                         }
@@ -178,11 +184,14 @@ impl Manager {
             ui.separator();
             ui.vertical(|ui| {
                 ui.set_min_width(390.0);
-                ui.heading(if self.selected.is_some() { "Edit entry" } else { "New entry" });
+                ui.heading(if self.selected.is_some() {
+                    "Edit entry"
+                } else {
+                    "New entry"
+                });
                 ui.label("Name");
                 ui.add(
-                    egui::TextEdit::singleline(&mut self.form.label)
-                        .desired_width(f32::INFINITY),
+                    egui::TextEdit::singleline(&mut self.form.label).desired_width(f32::INFINITY),
                 );
                 ui.label("Text to copy");
                 ui.add(
@@ -213,7 +222,7 @@ impl Manager {
                         }
                     }
                     if ui.button("Discard changes").clicked() {
-                        change_selection = Some(self.selected);
+                        self.select(self.selected);
                     }
                     if self.selected.is_some() && ui.button("Delete").clicked() {
                         self.confirm_delete = true;
@@ -261,14 +270,23 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn temp_config() -> (PathBuf, PathBuf, Config, Keymap) {
-        let stamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
-        let root = std::env::temp_dir().join(format!("trievium-manager-{}-{stamp}", std::process::id()));
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root =
+            std::env::temp_dir().join(format!("trievium-manager-{}-{stamp}", std::process::id()));
         fs::create_dir_all(&root).unwrap();
         let path = root.join("items.json");
         let cache = root.join("keys.json");
         let config = Config {
             version: 1,
-            entries: vec![Entry { label: "Greeting".into(), text: "Hello!".into(), key: Some("G".into()), priority: 0 }],
+            entries: vec![Entry {
+                label: "Greeting".into(),
+                text: "Hello!".into(),
+                key: Some("G".into()),
+                priority: 0,
+            }],
         };
         fs::write(&path, serde_json::to_vec(&config).unwrap()).unwrap();
         let map = Keymap::build(&config.entries).unwrap();
@@ -279,12 +297,23 @@ mod tests {
     fn add_edit_delete_and_reload() {
         let (path, cache, config, map) = temp_config();
         let mut mgr = Manager::new(path.clone(), cache, config, map).unwrap();
-        mgr.form = EntryForm { label: "Address".into(), text: "123 Example St".into(), key: "a".into(), priority: 80 };
+        mgr.form = EntryForm {
+            label: "Address".into(),
+            text: "123 Example St".into(),
+            key: "a".into(),
+            priority: 80,
+        };
         mgr.save_form().unwrap();
-        assert_eq!(Config::load(&path).unwrap().entries[1].key.as_deref(), Some("A"));
+        assert_eq!(
+            Config::load(&path).unwrap().entries[1].key.as_deref(),
+            Some("A")
+        );
         mgr.form.text = "456 Example St".into();
         mgr.save_form().unwrap();
-        assert_eq!(Config::load(&path).unwrap().entries[1].text, "456 Example St");
+        assert_eq!(
+            Config::load(&path).unwrap().entries[1].text,
+            "456 Example St"
+        );
         mgr.delete_entry().unwrap();
         assert_eq!(Config::load(&path).unwrap().entries.len(), 1);
         mgr.select(Some(0));
@@ -298,7 +327,12 @@ mod tests {
         let (path, cache, config, map) = temp_config();
         let initial = fs::read(&path).unwrap();
         let mut mgr = Manager::new(path.clone(), cache, config, map).unwrap();
-        mgr.form = EntryForm { label: "Conflicting".into(), text: "Text".into(), key: "GA".into(), priority: 0 };
+        mgr.form = EntryForm {
+            label: "Conflicting".into(),
+            text: "Text".into(),
+            key: "GA".into(),
+            priority: 0,
+        };
         assert!(mgr.save_form().is_err());
         assert_eq!(fs::read(&path).unwrap(), initial);
         fs::remove_dir_all(path.parent().unwrap()).unwrap();
@@ -308,7 +342,12 @@ mod tests {
     fn refuses_external_edits_without_overwriting() {
         let (path, cache, config, map) = temp_config();
         let mut mgr = Manager::new(path.clone(), cache, config, map).unwrap();
-        mgr.form = EntryForm { label: "New".into(), text: "Text".into(), key: String::new(), priority: 0 };
+        mgr.form = EntryForm {
+            label: "New".into(),
+            text: "Text".into(),
+            key: String::new(),
+            priority: 0,
+        };
         fs::write(&path, b"external edits").unwrap();
         assert!(mgr.save_form().is_err());
         assert_eq!(fs::read(&path).unwrap(), b"external edits");

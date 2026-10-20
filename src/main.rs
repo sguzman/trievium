@@ -111,8 +111,12 @@ fn run() -> Result<()> {
             let mut ordered: Vec<usize> = (0..config.entries.len()).collect();
             ordered.sort_by(|&a, &b| map.key(a).cmp(map.key(b)));
             let manager = if start_managing {
-                Some(Manager::new(path.clone(), cache_path.clone(), config.clone(), 
-                    Keymap::build_with_previous(&config.entries, &previous)?)?)
+                Some(Manager::new(
+                    path.clone(),
+                    cache_path.clone(),
+                    config.clone(),
+                    Keymap::build_with_previous(&config.entries, &previous)?,
+                )?)
             } else {
                 None
             };
@@ -239,16 +243,21 @@ struct Picker {
 
 impl Picker {
     fn open_manager(&mut self, ctx: &egui::Context) {
-        let previous: std::collections::BTreeMap<String, String> =
-            self.config.entries.iter().enumerate()
-                .map(|(i, entry)| (entry.label.clone(), self.map.key(i).to_owned()))
-                .collect();
-        match Keymap::build_with_previous(&self.config.entries, &previous)
-            .and_then(|map| Manager::new(
-                self.config_path.clone(), self.cache_path.clone(),
-                self.config.clone(), map
-            ))
-        {
+        let previous: std::collections::BTreeMap<String, String> = self
+            .config
+            .entries
+            .iter()
+            .enumerate()
+            .map(|(i, entry)| (entry.label.clone(), self.map.key(i).to_owned()))
+            .collect();
+        match Keymap::build_with_previous(&self.config.entries, &previous).and_then(|map| {
+            Manager::new(
+                self.config_path.clone(),
+                self.cache_path.clone(),
+                self.config.clone(),
+                map,
+            )
+        }) {
             Ok(manager) => {
                 self.manager = Some(manager);
                 self.typed.clear();
@@ -264,12 +273,14 @@ impl Picker {
             (self.config, self.map) = manager.into_data();
             self.typed.clear();
             self.ordered = (0..self.config.entries.len()).collect();
-            self.ordered.sort_by(|&a, &b| self.map.key(a).cmp(self.map.key(b)));
+            self.ordered
+                .sort_by(|&a, &b| self.map.key(a).cmp(self.map.key(b)));
             self.refresh_choices();
             self.error = None;
-            ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(
-                egui::vec2(560.0, picker_height(self.config.entries.len()))
-            ));
+            ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(
+                560.0,
+                picker_height(self.config.entries.len()),
+            )));
         }
     }
 

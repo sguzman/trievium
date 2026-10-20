@@ -232,7 +232,10 @@ impl eframe::App for Picker {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         let (events, modifiers) = ui.input(|input| (input.events.clone(), input.modifiers));
-        for action in self.keyboard.actions(&events, modifiers, std::time::Instant::now()) {
+        for action in self
+            .keyboard
+            .actions(&events, modifiers, std::time::Instant::now())
+        {
             match action {
                 InputAction::Close => {
                     ctx.send_viewport_cmd(egui::ViewportCommand::Close);
@@ -265,7 +268,12 @@ impl eframe::App for Picker {
                 "Waiting for keyboard focus from the compositor...",
             );
         }
-        let choices = self.next_keys.chars().map(|ch| ch.to_string()).collect::<Vec<_>>().join("  ");
+        let choices = self
+            .next_keys
+            .chars()
+            .map(|ch| ch.to_string())
+            .collect::<Vec<_>>()
+            .join("  ");
         let prompt = if self.selection.prefix().is_empty() {
             format!("Press one of: {choices}")
         } else {

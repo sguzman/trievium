@@ -152,3 +152,28 @@ if [[ "$copied" != "Best regards," ]]; then
 fi
 wait_for_picker_exit
 echo "Wayland E2E passed: G and C copied different payloads, and both pickers exited."
+
+# Regression for the unusable editor: start the full-sized management window
+# and close it with Escape. It must not hang or mutate the user's data.
+cp "$config" "$XDG_RUNTIME_DIR/original-config.json"
+./target/debug/trievium manage --config "$config" >"$XDG_RUNTIME_DIR/manager.log" 2>&1 &
+picker_pid=$!
+found=""
+for _ in $(seq 1 100); do
+  found=$(swaymsg -s "$sway_sock" -t get_tree | grep -o '"app_id": "trievium"' | head -1 || true)
+  if [[ -n "$found" ]]; then
+    break
+  fi
+  sleep 0.1
+done
+if [[ -z "$found" ]]; then
+  echo "Native management window did not map" >&2
+  cat "$XDG_RUNTIME_DIR/manager.log" >&2
+  exit 1
+fi
+swaymsg -s "$sway_sock" '[app_id="trievium"] focus'
+sleep 0.2
+wtype -k Escape
+wait_for_picker_exit
+cmp "$config" "$XDG_RUNTIME_DIR/original-config.json"
+echo "Wayland manager E2E passed: Escape closed editor and preserved configuration."

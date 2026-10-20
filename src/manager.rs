@@ -21,7 +21,7 @@ impl EntryForm {
         Self {
             label: entry.label.clone(),
             text: entry.text.clone(),
-            key: entry.key.clone().unwrap_or_default(),
+            key: entry.key.as_deref().unwrap_or_default().to_ascii_lowercase(),
             priority: entry.priority,
         }
     }
@@ -132,6 +132,15 @@ impl Manager {
         self.commit(replacement, Some(target))
     }
 
+    /// "Done" saves completed edits, rather than silently discarding them.
+    /// A failed validation leaves the editor open and preserves the form.
+    fn finish(&mut self) -> Result<()> {
+        if self.dirty() {
+            self.save_form()?;
+        }
+        Ok(())
+    }
+
     fn delete_entry(&mut self) -> Result<()> {
         let index = self.selected.context("Select an entry to delete")?;
         let mut replacement = self.config.clone();
@@ -144,7 +153,7 @@ impl Manager {
     pub fn ui(&mut self, ui: &mut egui::Ui) -> ManagerAction {
         let mut action = ManagerAction::Stay;
         egui::Frame::NONE
-            .inner_margin(egui::Margin::same(18))
+            .inner_margin(egui::Margin::same(24))
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
                     ui.heading("Trievium");
@@ -153,20 +162,22 @@ impl Manager {
                         if ui.button("Close").clicked() {
                             action = ManagerAction::Exit;
                         }
-                        // Done must NEVER trap the user. Saved changes
-                        // remain on disk; unsaved form edits are discarded.
+                        // Done saves edits before returning to the picker.
+                        // Validation errors remain visible without data loss.
                         if ui.button("Done").clicked() {
-                            action = ManagerAction::Back;
+                            match self.finish() {
+                                Ok(()) => action = ManagerAction::Back,
+                                Err(error) => self.error = Some(format!("{error:#}")),
+                            }
                         }
                     });
                 });
                 ui.add_space(10.0);
                 ui.horizontal_wrapped(|ui| {
                     if ui.button("+ New").clicked() {
-                        if self.dirty() {
-                            self.error = Some("Save or discard the current edits first.".into());
-                        } else {
-                            self.select(None);
+                        match self.finish() {
+                            Ok(()) => self.select(None),
+                            Err(error) => self.error = Some(format!("{error:#}")),
                         }
                     }
                     if ui.button("Save").clicked()
@@ -234,10 +245,9 @@ impl Manager {
                             self.entry_fields(ui);
                         }
                         if let Some(index) = change_selection {
-                            if self.dirty() {
-                                self.error = Some("Save or discard current edits first.".into());
-                            } else {
-                                self.select(Some(index));
+                            match self.finish() {
+                                Ok(()) => self.select(Some(index)),
+                                Err(error) => self.error = Some(format!("{error:#}")),
                             }
                         }
                     });
@@ -253,7 +263,7 @@ impl Manager {
             .max_height(190.0)
             .show(ui, |ui| {
                 for (index, entry) in self.config.entries.iter().enumerate() {
-                    let label = format!("{}    {}", self.map.key(index), entry.label);
+                    let label = format!("{}    {}", self.map.key(index).to_ascii_lowercase(), entry.label);
                     if ui
                         .selectable_label(self.selected == Some(index), label)
                         .clicked()
@@ -264,36 +274,74 @@ impl Manager {
             });
     }
 
+    fn input_frame<R>(
+        ui: &mut egui::Ui,
+        body: impl FnOnce(&mut egui::Ui) -> R,
+    ) -> R {
+        let light = !ui.visuals().dark_mode;
+        let fill = if light {
+            egui::Color32::from_rgb(246, 248, 252)
+        } else {
+            egui::Color32::from_rgb(35, 39, 47)
+        };
+        let border = if light {
+            egui::Color32::from_rgb(167, 176, 190)
+        } else {
+            egui::Color32::from_rgb(96, 107, 122)
+        };
+        egui::Frame::NONE
+            .fill(fill)
+            .stroke(egui::Stroke::new(1.0, border))
+            .corner_radius(egui::CornerRadius::same(5))
+            .inner_margin(egui::Margin::symmetric(10, 8))
+            .show(ui, body)
+            .inner
+    }
+
     fn entry_fields(&mut self, ui: &mut egui::Ui) {
         ui.heading(if self.selected.is_some() {
             "Edit entry"
         } else {
             "New entry"
         });
-        ui.add_space(10.0);
+        ui.add_space(14.0);
         ui.label("Name");
-        ui.add(egui::TextEdit::singleline(&mut self.form.label).desired_width(f32::INFINITY));
-        ui.add_space(10.0);
+        Self::input_frame(ui, |ui| {
+            ui.add(
+                egui::TextEdit::singleline(&mut self.form.label)
+                    .frame(false)
+                    .desired_width(ui.available_width().max(180.0)),
+            );
+        });
+        ui.add_space(14.0);
         ui.label("Text to copy");
-        ui.add(
-            egui::TextEdit::multiline(&mut self.form.text)
-                .desired_rows(8)
-                .desired_width(f32::INFINITY),
-        );
-        ui.add_space(12.0);
+        Self::input_frame(ui, |ui| {
+            ui.add(
+                egui::TextEdit::multiline(&mut self.form.text)
+                    .frame(false)
+                    .desired_rows(6)
+                    .desired_width(ui.available_width().max(180.0)),
+            );
+        });
+        ui.add_space(14.0);
         ui.horizontal_wrapped(|ui| {
             ui.vertical(|ui| {
                 ui.label("Pinned shortcut");
-                ui.add(
-                    egui::TextEdit::singleline(&mut self.form.key)
-                        .desired_width(125.0)
-                        .char_limit(4),
-                );
+                Self::input_frame(ui, |ui| {
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.form.key)
+                            .frame(false)
+                            .desired_width(100.0)
+                            .char_limit(4),
+                    );
+                });
             });
             ui.add_space(18.0);
             ui.vertical(|ui| {
                 ui.label("Automatic priority");
-                ui.add(egui::DragValue::new(&mut self.form.priority));
+                Self::input_frame(ui, |ui| {
+                    ui.add(egui::DragValue::new(&mut self.form.priority));
+                });
             });
         });
     }
@@ -369,6 +417,37 @@ mod tests {
         manager.select(None);
         assert!(!manager.dirty());
         fs::remove_dir_all(path.parent().unwrap()).unwrap();
+    }
+
+    #[test]
+    fn done_saves_new_entry_and_preserves_lowercase_shortcut_display() {
+        let (path, cache, config, map) = temp_config();
+        let mut mgr = Manager::new(path.clone(), cache, config, map).unwrap();
+        mgr.form = EntryForm {
+            label: "Quick reply".into(),
+            text: "Thanks!".into(),
+            key: "q".into(),
+            priority: 0,
+        };
+        mgr.finish().unwrap();
+        let saved = Config::load(&path).unwrap();
+        assert_eq!(saved.entries.len(), 2);
+        assert_eq!(saved.entries[1].key.as_deref(), Some("Q"));
+        mgr.select(Some(1));
+        assert_eq!(mgr.form.key, "q");
+        std::fs::remove_dir_all(path.parent().unwrap()).unwrap();
+    }
+
+    #[test]
+    fn invalid_done_keeps_form_and_previous_config() {
+        let (path, cache, config, map) = temp_config();
+        let before = std::fs::read(&path).unwrap();
+        let mut mgr = Manager::new(path.clone(), cache, config, map).unwrap();
+        mgr.form.label = "Incomplete".into();
+        assert!(mgr.finish().is_err());
+        assert_eq!(mgr.form.label, "Incomplete");
+        assert_eq!(std::fs::read(&path).unwrap(), before);
+        std::fs::remove_dir_all(path.parent().unwrap()).unwrap();
     }
 
     #[test]

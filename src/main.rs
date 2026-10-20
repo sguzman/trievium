@@ -353,14 +353,16 @@ impl eframe::App for Picker {
         // Paint an opaque surface in both modes. The original fixed dark
         // fill made egui's light theme unreadable.
         let theme = ui.ctx().theme();
+        // Both the picker and the entry manager must be opaque and respect
+        // the same desktop/system appearance.
+        ui.painter()
+            .rect_filled(ui.max_rect(), 0.0, Appearance::background(theme));
         if let Some(manager) = self.manager.as_mut() {
             if manager.ui(ui) == ManagerAction::Back {
                 self.close_manager(ui.ctx());
             }
             return;
         }
-        ui.painter()
-            .rect_filled(ui.max_rect(), 0.0, Appearance::background(theme));
         let focused = ui.input(|input| input.focused);
         if self.diagnose_input && self.last_focus != Some(focused) {
             eprintln!("trievium diagnostics: window focus={focused}");

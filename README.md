@@ -30,6 +30,12 @@ Replace the absolute path with your actual location. Choose a keybind that does 
 
 **Hyprland integration:** Trievium recognizes an active Hyprland session, waits briefly for its own window to map, then uses the Hyprland Lua dispatcher API to float, resize, center and focus **only its own process's window** (required for Hyprland 0.55+ Lua configurations). No compositor configuration edits or persistent rules are required. The integration runs once when opening, not continuously. On other compositors, Trievium relies on their default window-management behavior.
 
+## Diagnosing missed shortcuts
+
+Run `trievium --diagnose-input` instead of `trievium` when a key is ignored. The popup displays a diagnostic-mode indicator and the launching terminal receives *key-event metadata*, routing decisions, focus changes, and clipboard success/failure. It does **not** print stored snippets, typed text contents, or paste payloads. No diagnostic file is saved or uploaded. This flag is opt-in and does not affect ordinary launches.
+
+If another instance is already open, a new invocation prints an explicit message rather than silently returning. Close the previous picker before retesting an updated binary so the old process isn't mistaken for the new build.
+
 ## Preflight and compiled Linux builds
 
 After creating your configuration, `trievium doctor` performs a **read-only** check for Wayland session variables, the `wl-copy` program, and valid shortcuts. It does not touch the clipboard or launch a window. A passing result does not guarantee compositor focus or paste behavior; those still require real Hyprland QA.

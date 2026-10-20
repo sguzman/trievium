@@ -37,6 +37,10 @@ The picker attempts to obtain a session-local lock in `XDG_RUNTIME_DIR/trievium.
 
 `trievium doctor` checks Wayland presence, `wl-copy --version`, and the validity of configuration plus generated shortcuts without copying any content or creating configuration files. The read-only check is deliberately not considered a full integration test.
 
+## Input troubleshooting
+
+`--diagnose-input` provides opt-in terminal diagnostics for egui focus, key metadata, text/paste event length, routed selection action, and clipboard outcome. It never serializes expansion content or raw arbitrary text, and it does not persist logs. This is meant to tell apart compositor focus loss, ignored/modified events, invalid shortcut codes, and clipboard errors without further guessing. An attempted launch while another picker owns the session lock emits a message rather than silently exiting.
+
 ## Clipboard reliability
 
 On Wayland, clipboard data is normally served by its owner process. Exiting an application immediately after claiming clipboard ownership can lose the data. `wl-copy` forks and serves requests in the background by default. Trievium writes the complete UTF-8 contents to its stdin, closes the pipe, waits for the invoking process and closes the picker **only after success**. Do not change this to `egui`'s ordinary copied-text output without validating clipboard persistence.

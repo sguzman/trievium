@@ -116,6 +116,21 @@ impl KeyboardInput {
     }
 }
 
+/// Privacy-preserving event description for opt-in troubleshooting.
+/// Never print arbitrary text payloads or clipboard contents.
+pub fn describe_event(event: &Event) -> String {
+    match event {
+        Event::Key { key, pressed, repeat, modifiers, .. } => {
+            format!("key={key:?} pressed={pressed} repeat={repeat} mods={modifiers:?}")
+        }
+        Event::Text(text) => format!("text_event bytes={} (content omitted)", text.len()),
+        Event::Paste(text) => format!("paste_event bytes={} (content omitted)", text.len()),
+        Event::Copy => "copy_event".to_owned(),
+        Event::Cut => "cut_event".to_owned(),
+        _ => "other_event".to_owned(),
+    }
+}
+
 #[derive(Default)]
 pub struct Selection {
     prefix: String,
@@ -302,6 +317,16 @@ mod tests {
             )
             .is_empty()
         );
+    }
+
+    #[test]
+    fn diagnostic_messages_never_disclose_text_payloads() {
+        let value = "private content not for logs";
+        let message = describe_event(&Event::Text(value.into()));
+        assert!(!message.contains(value));
+        assert!(message.contains("content omitted"));
+        let paste_message = describe_event(&Event::Paste(value.into()));
+        assert!(!paste_message.contains(value));
     }
 
     #[test]

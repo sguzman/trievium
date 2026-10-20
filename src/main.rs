@@ -20,10 +20,12 @@ fn main() {
 fn run() -> Result<()> {
     let mut command = "pick".to_owned();
     let mut override_path = None;
+    let mut diagnose_input = false;
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "pick" | "init" | "validate" | "config-path" | "doctor" => command = arg,
+            "--diagnose-input" => diagnose_input = true,
             "--config" => {
                 override_path = Some(PathBuf::from(
                     args.next().context("--config requires a path")?,
@@ -35,12 +37,15 @@ fn run() -> Result<()> {
             }
             "--help" | "-h" => {
                 println!(
-                    "Trievium - keyboard-first text selection\n\nUsage: trievium [pick|init|validate|config-path|doctor] [--config PATH]\n\nDefault: pick. Keys are automatically assigned unless pinned in the JSON config."
+                    "Trievium - keyboard-first text selection\n\nUsage: trievium [pick|init|validate|config-path|doctor] [--config PATH] [--diagnose-input]\n\nDefault: pick. Keys are automatically assigned unless pinned in the JSON config."
                 );
                 return Ok(());
             }
             other => bail!("Unknown argument '{other}'. Run trievium --help"),
         }
+    }
+    if diagnose_input && command != "pick" {
+        bail!("--diagnose-input is only supported with the picker");
     }
     let path = config::config_path(override_path)?;
     match command.as_str() {
@@ -64,7 +69,10 @@ fn run() -> Result<()> {
             // A second hotkey invocation quietly avoids creating a second
             // picker, without killing or disturbing the existing process.
             let _instance_guard = match launch::acquire()? {
-                Some(Instance::Busy) => return Ok(()),
+                Some(Instance::Busy) => {
+                    eprintln!("trievium: another picker is already running. Close it before retrying.");
+                    return Ok(());
+                },
                 guard => guard,
             };
             let config = Config::load(&path)?;
@@ -89,8 +97,14 @@ fn run() -> Result<()> {
                 visible: Vec::new(),
                 next_keys: String::new(),
                 keyboard: KeyboardInput::default(),
+                diagnose_input,
+                last_focus: None,
             };
             picker.refresh_choices();
+            if diagnose_input {
+                eprintln!("trievium diagnostics: active (no snippet text is recorded)");
+                eprintln!("trievium diagnostics: app version {}", env!("CARGO_PKG_VERSION"));
+            }
             let native = eframe::NativeOptions {
                 renderer: eframe::Renderer::Glow,
                 viewport: egui::ViewportBuilder::default()
@@ -173,6 +187,8 @@ struct Picker {
     visible: Vec<usize>,
     next_keys: String,
     keyboard: KeyboardInput,
+    diagnose_input: bool,
+    last_focus: Option<bool>,
 }
 
 impl Picker {
@@ -195,9 +211,20 @@ impl Picker {
     }
 
     fn select(&mut self, index: usize, ctx: &egui::Context) {
+        if self.diagnose_input {
+            eprintln!("trievium diagnostics: shortcut {} selected; copying", self.map.key(index));
+        }
         match copy_text(&self.config.entries[index].text) {
-            Ok(()) => ctx.send_viewport_cmd(egui::ViewportCommand::Close),
+            Ok(()) => {
+                if self.diagnose_input {
+                    eprintln!("trievium diagnostics: copy successful; closing popup");
+                }
+                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            }
             Err(error) => {
+                if self.diagnose_input {
+                    eprintln!("trievium diagnostics: clipboard error: {error}");
+                }
                 self.selection.clear();
                 self.refresh_choices();
                 self.error = Some(format!(
@@ -220,6 +247,9 @@ impl Picker {
                 false
             }
             trievium::input::SelectionOutcome::Invalid => {
+                if self.diagnose_input {
+                    eprintln!("trievium diagnostics: shortcut letter {ch} has no match");
+                }
                 // Unassigned letters are harmless, not a failure.
                 self.error = None;
                 false
@@ -231,11 +261,24 @@ impl Picker {
 impl eframe::App for Picker {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
-        let (events, modifiers) = ui.input(|input| (input.events.clone(), input.modifiers));
+        let (events, modifiers, focused) =
+            ui.input(|input| (input.events.clone(), input.modifiers, input.focused));
+        if self.diagnose_input {
+            if self.last_focus != Some(focused) {
+                eprintln!("trievium diagnostics: egui focus={focused}");
+                self.last_focus = Some(focused);
+            }
+            for event in &events {
+                eprintln!("trievium diagnostics: {}", trievium::input::describe_event(event));
+            }
+        }
         for action in self
             .keyboard
             .actions(&events, modifiers, std::time::Instant::now())
         {
+            if self.diagnose_input {
+                eprintln!("trievium diagnostics: routed action={action:?}");
+            }
             match action {
                 InputAction::Close => {
                     ctx.send_viewport_cmd(egui::ViewportCommand::Close);
@@ -256,6 +299,9 @@ impl eframe::App for Picker {
         }
 
         ui.add_space(10.0);
+        if self.diagnose_input {
+            ui.label(egui::RichText::new("Input diagnostic mode · see terminal").small().weak());
+        }
         ui.horizontal(|ui| {
             ui.heading("Trievium");
             ui.separator();

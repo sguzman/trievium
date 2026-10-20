@@ -149,19 +149,16 @@ impl Manager {
                 ui.horizontal(|ui| {
                     ui.heading("Trievium");
                     ui.label(egui::RichText::new("Entries").weak());
-                    ui.with_layout(
-                        egui::Layout::right_to_left(egui::Align::Center),
-                        |ui| {
-                            if ui.button("Close").clicked() {
-                                action = ManagerAction::Exit;
-                            }
-                            // Done must NEVER trap the user. Saved changes
-                            // remain on disk; unsaved form edits are discarded.
-                            if ui.button("Done").clicked() {
-                                action = ManagerAction::Back;
-                            }
-                        },
-                    );
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui.button("Close").clicked() {
+                            action = ManagerAction::Exit;
+                        }
+                        // Done must NEVER trap the user. Saved changes
+                        // remain on disk; unsaved form edits are discarded.
+                        if ui.button("Done").clicked() {
+                            action = ManagerAction::Back;
+                        }
+                    });
                 });
                 ui.add_space(10.0);
                 ui.horizontal_wrapped(|ui| {
@@ -275,10 +272,7 @@ impl Manager {
         });
         ui.add_space(10.0);
         ui.label("Name");
-        ui.add(
-            egui::TextEdit::singleline(&mut self.form.label)
-                .desired_width(f32::INFINITY),
-        );
+        ui.add(egui::TextEdit::singleline(&mut self.form.label).desired_width(f32::INFINITY));
         ui.add_space(10.0);
         ui.label("Text to copy");
         ui.add(
@@ -303,7 +297,6 @@ impl Manager {
             });
         });
     }
-
 }
 
 #[cfg(test)]

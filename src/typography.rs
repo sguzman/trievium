@@ -61,10 +61,9 @@ pub fn install(ctx: &egui::Context) {
     let mut title_family = FontFamily::Proportional;
 
     if let Some(body) = read_installed_font(BODY_FAMILIES, false) {
-        fonts.font_data.insert(
-            "trievium_body".into(),
-            Arc::new(FontData::from_owned(body)),
-        );
+        fonts
+            .font_data
+            .insert("trievium_body".into(), Arc::new(FontData::from_owned(body)));
         fonts
             .families
             .entry(FontFamily::Proportional)
@@ -116,10 +115,7 @@ mod tests {
         let ctx = egui::Context::default();
         install(&ctx);
         let style = ctx.style();
-        assert_eq!(
-            style.text_styles.get(&TextStyle::Body).unwrap().size,
-            16.0
-        );
+        assert_eq!(style.text_styles.get(&TextStyle::Body).unwrap().size, 16.0);
         assert_eq!(
             style.text_styles.get(&TextStyle::Heading).unwrap().size,
             21.0

@@ -360,10 +360,10 @@ mod tests {
         assert_eq!(picker.push('b', &map), SelectionOutcome::Continue);
         assert_eq!(picker.push('z', &map), SelectionOutcome::Invalid);
         assert_eq!(picker.prefix(), "B");
+        picker.backspace();
+        assert_eq!(picker.prefix(), "");
+        assert_eq!(picker.push('b', &map), SelectionOutcome::Continue);
         assert_eq!(picker.push('c', &map), SelectionOutcome::Selected(1));
-        picker.backspace();
-        assert_eq!(picker.prefix(), "B");
-        picker.backspace();
         assert_eq!(picker.prefix(), "");
     }
 

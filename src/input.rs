@@ -13,84 +13,72 @@ pub enum InputAction {
     Ignore,
 }
 
-pub fn classify_key(event: &Event) -> InputAction {
-    let Event::Key {
-        key,
-        pressed: true,
-        repeat: false,
-        modifiers,
-        ..
-    } = event
-    else {
-        return InputAction::Ignore;
-    };
-    if modifiers.command || modifiers.ctrl || modifiers.alt || modifiers.mac_cmd {
-        return InputAction::Ignore;
+fn letter_for_key(key: Key) -> Option<char> {
+    match key {
+        Key::A => Some('A'), Key::B => Some('B'), Key::C => Some('C'),
+        Key::D => Some('D'), Key::E => Some('E'), Key::F => Some('F'),
+        Key::G => Some('G'), Key::H => Some('H'), Key::I => Some('I'),
+        Key::J => Some('J'), Key::K => Some('K'), Key::L => Some('L'),
+        Key::M => Some('M'), Key::N => Some('N'), Key::O => Some('O'),
+        Key::P => Some('P'), Key::Q => Some('Q'), Key::R => Some('R'),
+        Key::S => Some('S'), Key::T => Some('T'), Key::U => Some('U'),
+        Key::V => Some('V'), Key::W => Some('W'), Key::X => Some('X'),
+        Key::Y => Some('Y'), Key::Z => Some('Z'), _ => None,
     }
+}
+fn modified(m: eframe::egui::Modifiers) -> bool {
+    m.command || m.ctrl || m.alt || m.mac_cmd
+}
+pub fn classify_key(event: &Event) -> InputAction {
+    let Event::Key { key, pressed: true, repeat: false, modifiers, .. } = event
+    else { return InputAction::Ignore; };
+    if modified(*modifiers) { return InputAction::Ignore; }
     match key {
         Key::Escape => InputAction::Close,
         Key::Backspace => InputAction::Backspace,
-        Key::A => InputAction::Letter('A'),
-        Key::B => InputAction::Letter('B'),
-        Key::C => InputAction::Letter('C'),
-        Key::D => InputAction::Letter('D'),
-        Key::E => InputAction::Letter('E'),
-        Key::F => InputAction::Letter('F'),
-        Key::G => InputAction::Letter('G'),
-        Key::H => InputAction::Letter('H'),
-        Key::I => InputAction::Letter('I'),
-        Key::J => InputAction::Letter('J'),
-        Key::K => InputAction::Letter('K'),
-        Key::L => InputAction::Letter('L'),
-        Key::M => InputAction::Letter('M'),
-        Key::N => InputAction::Letter('N'),
-        Key::O => InputAction::Letter('O'),
-        Key::P => InputAction::Letter('P'),
-        Key::Q => InputAction::Letter('Q'),
-        Key::R => InputAction::Letter('R'),
-        Key::S => InputAction::Letter('S'),
-        Key::T => InputAction::Letter('T'),
-        Key::U => InputAction::Letter('U'),
-        Key::V => InputAction::Letter('V'),
-        Key::W => InputAction::Letter('W'),
-        Key::X => InputAction::Letter('X'),
-        Key::Y => InputAction::Letter('Y'),
-        Key::Z => InputAction::Letter('Z'),
-        _ => InputAction::Ignore,
+        _ => letter_for_key(*key).map_or(InputAction::Ignore, InputAction::Letter),
     }
 }
 
-/// Process key-down events if present; if a platform only reports text
-/// events, use single-letter text as a fallback. Never synthesize text from
-/// pasted or multi-character values. The caller remembers whether the native
-/// key event path has ever worked, preventing a duplicate Text from being
-/// consumed in a subsequent frame.
-pub fn actions(events: &[Event], key_events_observed: &mut bool) -> Vec<InputAction> {
-    if events
-        .iter()
-        .any(|event| matches!(event, Event::Key { pressed: true, .. }))
-    {
-        *key_events_observed = true;
-    }
-    if *key_events_observed {
-        events
-            .iter()
-            .map(classify_key)
-            .filter(|action| *action != InputAction::Ignore)
-            .collect()
-    } else {
-        events
-            .iter()
-            .filter_map(|event| match event {
-                Event::Text(text) if text.len() == 1 => {
-                    let letter = text.as_bytes()[0];
-                    letter
-                        .is_ascii_alphabetic()
-                        .then_some(InputAction::Letter(char::from(letter.to_ascii_uppercase())))
+/// Prefer native key-downs, without permanently disabling the text fallback.
+/// Deduplicate Text events from the same physical press across adjacent frames.
+#[derive(Default)]
+pub struct KeyboardInput {
+    recent_native: Vec<(char, std::time::Instant)>,
+}
+impl KeyboardInput {
+    pub fn actions(
+        &mut self,
+        events: &[Event],
+        modifiers: eframe::egui::Modifiers,
+        now: std::time::Instant,
+    ) -> Vec<InputAction> {
+        use std::time::Duration;
+        self.recent_native.retain(|(_, at)| now.saturating_duration_since(*at) < Duration::from_millis(180));
+        let mut output = Vec::new();
+        for event in events {
+            if let Event::Key { key, pressed: true, .. } = event {
+                if let Some(letter) = letter_for_key(*key) {
+                    self.recent_native.push((letter, now));
                 }
-                _ => None,
-            })
-            .collect()
+                let action = classify_key(event);
+                if action != InputAction::Ignore { output.push(action); }
+            }
+        }
+        if !modified(modifiers) {
+            for event in events {
+                if let Event::Text(text) = event
+                    && text.len() == 1
+                    && text.as_bytes()[0].is_ascii_alphabetic()
+                {
+                    let letter = char::from(text.as_bytes()[0].to_ascii_uppercase());
+                    if !self.recent_native.iter().any(|(ch, _)| *ch == letter) {
+                        output.push(InputAction::Letter(letter));
+                    }
+                }
+            }
+        }
+        output
     }
 }
 
@@ -188,35 +176,42 @@ mod tests {
     }
 
     #[test]
-    fn text_only_backend_can_select_a_letter() {
-        let mut observed = false;
-        assert_eq!(
-            actions(&[Event::Text("g".into())], &mut observed),
-            vec![InputAction::Letter('G')]
-        );
-        assert!(!observed);
-        assert!(actions(&[Event::Text("paste".into())], &mut observed).is_empty());
-        assert!(actions(&[Event::Text("é".into())], &mut observed).is_empty());
+    fn text_only_event_selects_without_native_key() {
+        let mut k = KeyboardInput::default();
+        let now = std::time::Instant::now();
+        assert_eq!(k.actions(&[Event::Text("g".into())], Modifiers::NONE, now), vec![InputAction::Letter('G')]);
+        assert!(k.actions(&[Event::Text("paste".into())], Modifiers::NONE, now).is_empty());
+        assert!(k.actions(&[Event::Text("é".into())], Modifiers::NONE, now).is_empty());
     }
-
     #[test]
-    fn native_key_events_prevent_duplicate_text_selection() {
-        let mut observed = false;
-        let first = vec![
-            event(Key::A, Modifiers::NONE, false),
-            Event::Text("a".into()),
-        ];
-        assert_eq!(
-            actions(&first, &mut observed),
-            vec![InputAction::Letter('A')]
-        );
-        assert!(observed);
-        assert!(actions(&[Event::Text("a".into())], &mut observed).is_empty());
-        let combo = vec![
-            event(Key::G, Modifiers::CTRL, false),
-            Event::Text("g".into()),
-        ];
-        assert!(actions(&combo, &mut observed).is_empty());
+    fn native_key_deduplicates_text_across_frames() {
+        let mut k = KeyboardInput::default();
+        let now = std::time::Instant::now();
+        let both = vec![event(Key::A, Modifiers::NONE, false), Event::Text("a".into())];
+        assert_eq!(k.actions(&both, Modifiers::NONE, now), vec![InputAction::Letter('A')]);
+        assert!(k.actions(&[Event::Text("a".into())], Modifiers::NONE, now + std::time::Duration::from_millis(40)).is_empty());
+    }
+    #[test]
+    fn unrelated_native_key_does_not_disable_text_fallback() {
+        let mut k = KeyboardInput::default();
+        let now = std::time::Instant::now();
+        assert_eq!(k.actions(&[event(Key::Escape, Modifiers::NONE, false)], Modifiers::NONE, now), vec![InputAction::Close]);
+        assert_eq!(k.actions(&[Event::Text("g".into())], Modifiers::NONE, now), vec![InputAction::Letter('G')]);
+    }
+    #[test]
+    fn dedup_window_expires_for_text_only_keys() {
+        let mut k = KeyboardInput::default();
+        let now = std::time::Instant::now();
+        assert_eq!(k.actions(&[event(Key::G, Modifiers::NONE, false)], Modifiers::NONE, now), vec![InputAction::Letter('G')]);
+        assert_eq!(k.actions(&[Event::Text("g".into())], Modifiers::NONE, now + std::time::Duration::from_millis(200)), vec![InputAction::Letter('G')]);
+    }
+    #[test]
+    fn modified_key_cannot_leak_via_text_fallback() {
+        let mut k = KeyboardInput::default();
+        let now = std::time::Instant::now();
+        let both = vec![event(Key::G, Modifiers::CTRL, false), Event::Text("g".into())];
+        assert!(k.actions(&both, Modifiers::CTRL, now).is_empty());
+        assert!(k.actions(&[Event::Text("g".into())], Modifiers::NONE, now + std::time::Duration::from_millis(40)).is_empty());
     }
 
     #[test]

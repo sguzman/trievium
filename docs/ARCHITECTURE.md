@@ -15,7 +15,7 @@ Trievium is a single-process, on-demand selection UI: **keybind -> prefix-tree l
 - `hyprland.rs`: bounded, one-shot Hyprland window correction. Finds only a mapped `trievium` window belonging to the current process, then sets floating/size/focus and centers it. Does not touch global rules, workspaces, or other windows.
 - `main.rs`: small CLI (including read-only `doctor`) and focused egui picker.
 
-Config is read once at launch, without a watcher, daemon, or network calls. Keyboard handling prefers egui key-down events and ignores OS key-repeat and Ctrl/Alt/Super combinations. If no key-down events have ever been received, a single ASCII-letter text event can be used as a fallback. Native and text sources are never processed together, preventing duplicated selections. Failed clipboard operations reset the prefix for a safe retry. The visible-match list and next-letter hints are recomputed on prefix changes, not on every UI redraw. For now, changes take effect on the next invocation.
+Config is read once at launch, without a watcher, daemon, or network calls. Keyboard handling prefers egui key-down events and ignores OS key-repeat and Ctrl/Alt/Super combinations. The ASCII text-event fallback remains available even after unrelated native key events. Recently received native letter events suppress matching text for 180 ms across frames, preventing duplicate selections; modified chords are ignored. Unassigned letters are silently ignored. Failed clipboard operations reset the prefix for a safe retry. The visible-match list and next-letter hints are recomputed on prefix changes, not on every UI redraw. For now, changes take effect on the next invocation.
 
 ## Key assignment and invariants
 

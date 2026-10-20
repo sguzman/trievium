@@ -5,7 +5,7 @@ use std::process::Command;
 use trievium::clipboard::copy_text;
 use trievium::config::{self, Config};
 use trievium::hyprland;
-use trievium::input::{InputAction, Selection, actions};
+use trievium::input::{InputAction, KeyboardInput, Selection};
 use trievium::launch::{self, Instance};
 use trievium::shortcut_cache;
 use trievium::trie::Keymap;
@@ -88,7 +88,7 @@ fn run() -> Result<()> {
                 ordered,
                 visible: Vec::new(),
                 next_keys: String::new(),
-                key_events_observed: false,
+                keyboard: KeyboardInput::default(),
             };
             picker.refresh_choices();
             let native = eframe::NativeOptions {
@@ -172,7 +172,7 @@ struct Picker {
     ordered: Vec<usize>,
     visible: Vec<usize>,
     next_keys: String,
-    key_events_observed: bool,
+    keyboard: KeyboardInput,
 }
 
 impl Picker {
@@ -208,7 +208,6 @@ impl Picker {
     }
 
     fn type_char(&mut self, ch: char, ctx: &egui::Context) -> bool {
-        let attempted = format!("{}{}", self.selection.prefix(), ch);
         match self.selection.push(ch, &self.map) {
             trievium::input::SelectionOutcome::Selected(index) => {
                 self.error = None;
@@ -221,11 +220,8 @@ impl Picker {
                 false
             }
             trievium::input::SelectionOutcome::Invalid => {
-                // Don't append impossible letters; users can immediately try
-                // another key without having to undo an invalid keystroke.
-                self.error = Some(format!(
-                    "No selection matches '{attempted}'. Try another key."
-                ));
+                // Unassigned letters are harmless, not a failure.
+                self.error = None;
                 false
             }
         }
@@ -235,8 +231,8 @@ impl Picker {
 impl eframe::App for Picker {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
-        let events = ui.input(|input| input.events.clone());
-        for action in actions(&events, &mut self.key_events_observed) {
+        let (events, modifiers) = ui.input(|input| (input.events.clone(), input.modifiers));
+        for action in self.keyboard.actions(&events, modifiers, std::time::Instant::now()) {
             match action {
                 InputAction::Close => {
                     ctx.send_viewport_cmd(egui::ViewportCommand::Close);
@@ -269,10 +265,11 @@ impl eframe::App for Picker {
                 "Waiting for keyboard focus from the compositor...",
             );
         }
+        let choices = self.next_keys.chars().map(|ch| ch.to_string()).collect::<Vec<_>>().join("  ");
         let prompt = if self.selection.prefix().is_empty() {
-            "Press a highlighted key".to_owned()
+            format!("Press one of: {choices}")
         } else {
-            format!("Sequence: {}", self.selection.prefix())
+            format!("Sequence: {}   Next: {choices}", self.selection.prefix())
         };
         ui.label(egui::RichText::new(prompt).size(17.0).strong());
         if let Some(error) = &self.error {

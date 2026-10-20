@@ -114,7 +114,7 @@ mod tests {
     fn configures_typography_without_installed_optional_fonts() {
         let ctx = egui::Context::default();
         install(&ctx);
-        let style = ctx.style();
+        let style = ctx.style_of(egui::Theme::Dark);
         assert_eq!(style.text_styles.get(&TextStyle::Body).unwrap().size, 16.0);
         assert_eq!(
             style.text_styles.get(&TextStyle::Heading).unwrap().size,

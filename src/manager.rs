@@ -314,7 +314,7 @@ impl Manager {
         Self::input_frame(ui, |ui| {
             ui.add(
                 egui::TextEdit::singleline(&mut self.form.label)
-                    .frame(false)
+                    .frame(egui::Frame::NONE)
                     .desired_width(ui.available_width().max(180.0)),
             );
         });
@@ -323,7 +323,7 @@ impl Manager {
         Self::input_frame(ui, |ui| {
             ui.add(
                 egui::TextEdit::multiline(&mut self.form.text)
-                    .frame(false)
+                    .frame(egui::Frame::NONE)
                     .desired_rows(6)
                     .desired_width(ui.available_width().max(180.0)),
             );
@@ -335,7 +335,7 @@ impl Manager {
                 Self::input_frame(ui, |ui| {
                     ui.add(
                         egui::TextEdit::singleline(&mut self.form.key)
-                            .frame(false)
+                            .frame(egui::Frame::NONE)
                             .desired_width(100.0)
                             .char_limit(4),
                     );

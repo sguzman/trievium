@@ -26,6 +26,13 @@ fn focus_when_mapped(pid: u32, width: i32, height: i32) {
         if let Some(address) = our_window_address(pid) {
             if let Err(error) = configure_our_window(&address, width, height) {
                 eprintln!("trievium: could not configure Hyprland popup: {error}");
+                return;
+            }
+            // A successful dispatcher response only means the command was
+            // accepted. Verify that the compositor really focused this
+            // window. Retry briefly during the initial mapping transition.
+            if let Err(error) = confirm_popup_focus(&address) {
+                eprintln!("trievium: {error}");
             }
             return;
         }
@@ -112,6 +119,38 @@ fn configure_our_window(address: &str, width: i32, height: i32) -> Result<(), St
     Ok(())
 }
 
+fn active_window_address(bytes: &[u8]) -> Option<String> {
+    let value: Value = serde_json::from_slice(bytes).ok()?;
+    let address = value.get("address")?.as_str()?;
+    valid_address(address).then(|| address.to_owned())
+}
+
+fn is_active_window(address: &str) -> bool {
+    let Ok(output) = Command::new("hyprctl").args(["-j", "activewindow"]).output() else {
+        return false;
+    };
+    output.status.success() && active_window_address(&output.stdout).as_deref() == Some(address)
+}
+
+fn confirm_popup_focus(address: &str) -> Result<(), String> {
+    let focus = format!("hl.dsp.focus({{ window = \"address:{address}\" }})");
+    for attempt in 0..12 {
+        if is_active_window(address) {
+            return Ok(());
+        }
+        // Only run during startup. We do not install a permanent focus
+        // watcher that could interfere with the user's other applications.
+        if attempt > 0 {
+            dispatch_lua(&focus)?;
+        }
+        thread::sleep(Duration::from_millis(75));
+    }
+    if is_active_window(address) {
+        return Ok(());
+    }
+    Err(format!("Hyprland did not focus Trievium window {address} after startup"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -134,6 +173,17 @@ mod tests {
             assert!(!valid_address(address));
         }
         assert!(valid_address("0x1a2BF0"));
+    }
+
+    #[test]
+    fn active_window_verification_requires_matching_address() {
+        assert_eq!(
+            active_window_address(br#"{"address":"0x1234","class":"trievium"}"#).as_deref(),
+            Some("0x1234")
+        );
+        assert_eq!(active_window_address(br#"{"address":"garbage"}"#), None);
+        assert_eq!(active_window_address(br#"{"pid":111}"#), None);
+        assert_eq!(active_window_address(b"not json"), None);
     }
 
     #[test]

@@ -41,11 +41,11 @@ CI also produces a packaged Linux x86_64 binary from each successful run. Open t
 - `G` could immediately copy your Greeting and close.
 - `T` could reveal several choices, with `TA` and `TB` as terminal sequences.
 - `Esc` closes without copying; `Backspace` corrects a partial sequence.
-- Selection uses fresh letter key-down events, ignoring OS key-repeat and Ctrl/Alt/Super combinations. Shift is allowed; invalid letters leave the current prefix unchanged so you can correct the next keystroke immediately.
+- Selection prefers fresh letter key-down events, ignoring OS key-repeat and Ctrl/Alt/Super combinations. A single-character text-event fallback supports platforms that do not deliver native key-down events. Invalid letters leave the prefix unchanged.
 - Clicking a row or its key badge also copies and exits.
 - The popup sizes itself to the entry count (up to a maximum), shows remaining key choices, and virtualizes long lists for responsive scrolling.
 - A session-local advisory lock prevents repeated hotkey presses opening multiple windows; no existing process is terminated. If `XDG_RUNTIME_DIR` is absent, locking is skipped.
-- On Hyprland, the picker floats and requests focus automatically; no manual click should be needed before typing.
+- On Hyprland, the picker floats, requests focus and verifies it against the active-window address, retrying briefly at startup if necessary. An unfocused popup displays a visible warning instead of silently ignoring your keystrokes.
 - A failed clipboard operation displays an error, clears the terminal sequence for retry, and **does not exit**.
 - `wl-copy` runs without `--foreground`, leaving clipboard ownership alive after the UI exits. Paste normally into the previous application.
 - Headless CI verifies Unicode and multiline bytes through the same subprocess boundary using a local file writer; it does not simulate a real Wayland clipboard.

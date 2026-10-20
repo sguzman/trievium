@@ -5,7 +5,7 @@ use std::process::Command;
 use trievium::clipboard::copy_text;
 use trievium::config::{self, Config};
 use trievium::hyprland;
-use trievium::input::{InputAction, Selection, classify_key};
+use trievium::input::{InputAction, Selection, actions};
 use trievium::launch::{self, Instance};
 use trievium::shortcut_cache;
 use trievium::trie::Keymap;
@@ -88,6 +88,7 @@ fn run() -> Result<()> {
                 ordered,
                 visible: Vec::new(),
                 next_keys: String::new(),
+                key_events_observed: false,
             };
             picker.refresh_choices();
             let native = eframe::NativeOptions {
@@ -171,6 +172,7 @@ struct Picker {
     ordered: Vec<usize>,
     visible: Vec<usize>,
     next_keys: String,
+    key_events_observed: bool,
 }
 
 impl Picker {
@@ -234,8 +236,8 @@ impl eframe::App for Picker {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         let events = ui.input(|input| input.events.clone());
-        for event in &events {
-            match classify_key(event) {
+        for action in actions(&events, &mut self.key_events_observed) {
+            match action {
                 InputAction::Close => {
                     ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                     return;
@@ -261,6 +263,12 @@ impl eframe::App for Picker {
             ui.label(egui::RichText::new("type to select · Esc closes").weak());
         });
         ui.add_space(5.0);
+        if !ui.input(|input| input.focused) {
+            ui.colored_label(
+                egui::Color32::from_rgb(240, 168, 90),
+                "Waiting for keyboard focus from the compositor...",
+            );
+        }
         let prompt = if self.selection.prefix().is_empty() {
             "Press a highlighted key".to_owned()
         } else {

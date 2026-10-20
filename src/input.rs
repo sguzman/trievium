@@ -60,6 +60,38 @@ pub fn classify_key(event: &Event) -> InputAction {
     }
 }
 
+
+/// Process key-down events if present; if a platform only reports text
+/// events, use single-letter text as a fallback. Never synthesize text from
+/// pasted or multi-character values. The caller remembers whether the native
+/// key event path has ever worked, preventing a duplicate Text from being
+/// consumed in a subsequent frame.
+pub fn actions(events: &[Event], key_events_observed: &mut bool) -> Vec<InputAction> {
+    if events.iter().any(|event| matches!(event, Event::Key { pressed: true, .. })) {
+        *key_events_observed = true;
+    }
+    if *key_events_observed {
+        events
+            .iter()
+            .map(classify_key)
+            .filter(|action| *action != InputAction::Ignore)
+            .collect()
+    } else {
+        events
+            .iter()
+            .filter_map(|event| match event {
+                Event::Text(text) if text.len() == 1 => {
+                    let letter = text.as_bytes()[0];
+                    letter.is_ascii_alphabetic().then_some(InputAction::Letter(
+                        char::from(letter.to_ascii_uppercase()),
+                    ))
+                }
+                _ => None,
+            })
+            .collect()
+    }
+}
+
 #[derive(Default)]
 pub struct Selection {
     prefix: String,
@@ -151,6 +183,35 @@ mod tests {
             classify_key(&event(Key::A, Modifiers::SHIFT, false)),
             InputAction::Letter('A')
         );
+    }
+
+    #[test]
+    fn text_only_backend_can_select_a_letter() {
+        let mut observed = false;
+        assert_eq!(
+            actions(&[Event::Text("g".into())], &mut observed),
+            vec![InputAction::Letter('G')]
+        );
+        assert!(!observed);
+        assert!(actions(&[Event::Text("paste".into())], &mut observed).is_empty());
+        assert!(actions(&[Event::Text("é".into())], &mut observed).is_empty());
+    }
+
+    #[test]
+    fn native_key_events_prevent_duplicate_text_selection() {
+        let mut observed = false;
+        let first = vec![
+            event(Key::A, Modifiers::NONE, false),
+            Event::Text("a".into()),
+        ];
+        assert_eq!(actions(&first, &mut observed), vec![InputAction::Letter('A')]);
+        assert!(observed);
+        assert!(actions(&[Event::Text("a".into())], &mut observed).is_empty());
+        let combo = vec![
+            event(Key::G, Modifiers::CTRL, false),
+            Event::Text("g".into()),
+        ];
+        assert!(actions(&combo, &mut observed).is_empty());
     }
 
     #[test]

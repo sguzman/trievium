@@ -343,21 +343,7 @@ hl = {
 }
 "#;
         let pre_map_test = format!(
-            "hl = {{ window_rule = function(t) assert(t.name == 'trievium-float-on-open' and t.match.class == '^trievium
-            let script = format!("{prelude}\nhl.dispatch({expression})");
-            let output = Command::new(interpreter)
-                .args(["-e", &script])
-                .output()
-                .unwrap();
-            assert!(
-                output.status.success(),
-                "Lua rejected generated dispatcher {expression}: {}",
-                String::from_utf8_lossy(&output.stderr)
-            );
-        }
-    }
-}
- and t.float and t.center) end }}; {PRE_MAP_RULE}"
+            "hl = {{ window_rule = function(t) assert(t.name == 'trievium-float-on-open' and t.match.class == '^trievium$' and t.float and t.center) end }}; {PRE_MAP_RULE}"
         );
         let result = Command::new(interpreter)
             .args(["-e", &pre_map_test])

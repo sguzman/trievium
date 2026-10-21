@@ -28,7 +28,7 @@ bind = SUPER, P, exec, /absolute/path/to/trievium/target/release/trievium
 
 Replace the absolute path with your actual location. Choose a keybind that does not conflict with your existing binds.
 
-**Hyprland integration:** Trievium recognizes an active Hyprland session, waits briefly for its own window to map, then uses the Hyprland Lua dispatcher API to float, resize, center, raise above other windows, and focus **only its own process's window** (required for Hyprland 0.55+ Lua configurations). No compositor configuration edits or persistent rules are required. The integration runs once when opening, not continuously. On other compositors, Trievium relies on their default window-management behavior.
+**Hyprland integration:** Before creating its Wayland window, Trievium installs an exact-app-ID, named **runtime floating rule** using `hyprctl eval` (Hyprland 0.55+ Lua configuration). This prevents the workspace reflow caused by floating it *after* mapping. The named rule is reused across launches, without modifying Hyprland configuration files. After mapping, it verifies that its own PID/class window is already floating before resizing, centering, raising, and focusing it. If the pre-map rule is rejected, the popup does not open tiled. On other compositors, window management remains compositor-defined.
 
 ## Manage entries in Trievium
 

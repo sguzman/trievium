@@ -160,9 +160,11 @@ fn run() -> Result<()> {
                     .with_always_on_top(),
                 ..Default::default()
             };
-            // Hyprland otherwise places a normal Wayland toplevel in the
-            // tiling layout. Correct only this process's mapped window, and
-            // do it asynchronously so the first egui frame is not blocked.
+            // A post-map float briefly tiles and rearranges other windows.
+            // Install the rule before eframe creates the Wayland surface, or
+            // fail without opening a tiled fallback.
+            hyprland::prepare_floating_popup().map_err(anyhow::Error::msg)?;
+            // Only this process's already-floating window is focused/sized.
             hyprland::focus_new_popup(window_width as i32, window_height.round() as i32);
             eframe::run_native(
                 "trievium",

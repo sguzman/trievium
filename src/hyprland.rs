@@ -16,8 +16,7 @@ const RETRY_DELAY: Duration = Duration::from_millis(50);
 
 // One named rule is updated in place on repeated launches; no growing list
 // of per-process rules, and no modification of the user's config file.
-const PRE_MAP_RULE: &str =
-    r#"hl.window_rule({ name = "trievium-float-on-open", match = { class = "^trievium$" }, float = true, center = true })"#;
+const PRE_MAP_RULE: &str = r#"hl.window_rule({ name = "trievium-float-on-open", match = { class = "^trievium$" }, float = true, center = true })"#;
 
 /// A late tile-to-float conversion reflows other windows before it runs.
 /// Set the static rule synchronously before the Wayland toplevel exists.
@@ -53,7 +52,9 @@ fn focus_when_mapped(pid: u32, width: i32, height: i32) {
     for _ in 0..RETRIES {
         if let Some((address, floating)) = our_window_address(pid) {
             if !floating {
-                eprintln!("trievium: popup mapped tiled despite the pre-map floating rule; closing to protect workspace layout");
+                eprintln!(
+                    "trievium: popup mapped tiled despite the pre-map floating rule; closing to protect workspace layout"
+                );
                 std::process::exit(1);
             }
             if let Err(error) = configure_our_window(&address, width, height) {
@@ -312,7 +313,11 @@ mod tests {
         assert!(PRE_MAP_RULE.contains("float = true"));
         assert!(PRE_MAP_RULE.contains("center = true"));
         let dispatchers = popup_dispatchers("0xabc", 560, 420).unwrap();
-        assert!(dispatchers.iter().all(|expr| !expr.contains("window.float")));
+        assert!(
+            dispatchers
+                .iter()
+                .all(|expr| !expr.contains("window.float"))
+        );
     }
 
     #[test]

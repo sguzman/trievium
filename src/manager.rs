@@ -240,12 +240,7 @@ impl Manager {
                 let mut change_selection = None;
                 if wide_library_layout(ui.available_width()) {
                     ui.horizontal(|ui| {
-                        self.library_panel(
-                            ui,
-                            &mut change_selection,
-                            LIBRARY_WIDTH,
-                            body_height,
-                        );
+                        self.library_panel(ui, &mut change_selection, LIBRARY_WIDTH, body_height);
                         ui.add_space(12.0);
                         ui.separator();
                         ui.add_space(12.0);
@@ -317,10 +312,7 @@ impl Manager {
                             if ui
                                 .add_sized(
                                     [ui.available_width(), 30.0],
-                                    egui::Button::selectable(
-                                        self.selected == Some(index),
-                                        label,
-                                    ),
+                                    egui::Button::selectable(self.selected == Some(index), label),
                                 )
                                 .clicked()
                             {
@@ -453,7 +445,10 @@ mod tests {
             });
         }
         assert!(region.width() >= 245.0, "library too narrow: {region:?}");
-        assert!(region.height() >= 350.0, "library scroll area still collapsed: {region:?}");
+        assert!(
+            region.height() >= 350.0,
+            "library scroll area still collapsed: {region:?}"
+        );
         fs::remove_dir_all(path.parent().unwrap()).unwrap();
     }
 

@@ -45,6 +45,19 @@ pub enum ManagerAction {
     Exit,
 }
 
+// Reserve enough width for meaningful labels while leaving the edit form
+// comfortable in the default 780px window.
+const LIBRARY_WIDTH: f32 = 260.0;
+const SIDE_BY_SIDE_MIN_WIDTH: f32 = 715.0;
+const LIBRARY_MIN_LIST_HEIGHT: f32 = 300.0;
+
+// The LIBRARY heading and its spacing live above the scrollable entries.
+// Keep the list tall enough to be useful even before Hyprland resizes the
+// initial picker window into the editor.
+fn library_list_height(available_body_height: f32) -> f32 {
+    (available_body_height - 32.0).max(LIBRARY_MIN_LIST_HEIGHT)
+}
+
 pub struct Manager {
     path: PathBuf,
     cache_path: PathBuf,
@@ -216,6 +229,10 @@ impl Manager {
                 ui.separator();
                 ui.add_space(10.0);
 
+                // Measure the finite editor viewport before entering the
+                // outer scrolling region. Measuring inside it can instead
+                // yield the unbounded content height.
+                let list_height = library_list_height(ui.available_height());
                 // Both narrow and fully resized layouts must remain usable.
                 // A vertical scroll view is critical for the initial 560x175
                 // picker surface before Hyprland applies the resize.
@@ -224,11 +241,11 @@ impl Manager {
                     .auto_shrink([false, false])
                     .show(ui, |ui| {
                         let mut change_selection = None;
-                        if ui.available_width() >= 675.0 {
+                        if ui.available_width() >= SIDE_BY_SIDE_MIN_WIDTH {
                             ui.horizontal(|ui| {
                                 ui.vertical(|ui| {
-                                    ui.set_width(210.0);
-                                    self.entry_list(ui, &mut change_selection);
+                                    ui.set_width(LIBRARY_WIDTH);
+                                    self.entry_list(ui, &mut change_selection, list_height);
                                 });
                                 ui.add_space(12.0);
                                 ui.separator();
@@ -241,7 +258,7 @@ impl Manager {
                         } else {
                             // Side-by-side min-width columns previously
                             // overflowed to the right, hiding the form.
-                            self.entry_list(ui, &mut change_selection);
+                            self.entry_list(ui, &mut change_selection, list_height);
                             ui.add_space(14.0);
                             ui.separator();
                             ui.add_space(14.0);
@@ -258,12 +275,15 @@ impl Manager {
         action
     }
 
-    fn entry_list(&mut self, ui: &mut egui::Ui, change: &mut Option<usize>) {
+    fn entry_list(&mut self, ui: &mut egui::Ui, change: &mut Option<usize>, height: f32) {
         ui.label(egui::RichText::new("LIBRARY").small().strong());
         ui.add_space(8.0);
+        // Use the actual editor height; the old 190px cap forced users to
+        // scroll through a tiny list despite ample empty space below it.
         egui::ScrollArea::vertical()
             .id_salt("manager_entries")
-            .max_height(190.0)
+            .max_height(height)
+            .auto_shrink([false, false])
             .show(ui, |ui| {
                 for (index, entry) in self.config.entries.iter().enumerate() {
                     let label = format!(
@@ -371,6 +391,14 @@ mod tests {
         fs::write(&path, serde_json::to_vec(&config).unwrap()).unwrap();
         let map = Keymap::build(&config.entries).unwrap();
         (path, cache, config, map)
+    }
+
+    #[test]
+    fn library_panel_uses_editor_space_instead_of_old_190px_cap() {
+        assert_eq!(LIBRARY_WIDTH, 260.0);
+        assert_eq!(library_list_height(220.0), 300.0);
+        assert_eq!(library_list_height(480.0), 448.0);
+        assert!(SIDE_BY_SIDE_MIN_WIDTH >= LIBRARY_WIDTH + 380.0 + 48.0);
     }
 
     #[test]

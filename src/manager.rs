@@ -438,9 +438,10 @@ mod tests {
                 )),
                 ..Default::default()
             };
-            let _ = ctx.run_ui(input, |ui| {
+            ctx.run_ui(input, |ui| {
                 region = manager.library_panel(ui, &mut None, 260.0, 410.0);
-            });
+            })
+            .drop_without_applying_deltas();
         }
         assert!(region.width() >= 245.0, "library too narrow: {region:?}");
         assert!(

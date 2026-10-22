@@ -58,6 +58,10 @@ fn library_list_height(available_body_height: f32) -> f32 {
     (available_body_height - 32.0).max(LIBRARY_MIN_LIST_HEIGHT)
 }
 
+fn wide_library_layout(available_width: f32) -> bool {
+    available_width >= SIDE_BY_SIDE_MIN_WIDTH
+}
+
 pub struct Manager {
     path: PathBuf,
     cache_path: PathBuf,
@@ -241,7 +245,7 @@ impl Manager {
                     .auto_shrink([false, false])
                     .show(ui, |ui| {
                         let mut change_selection = None;
-                        if ui.available_width() >= SIDE_BY_SIDE_MIN_WIDTH {
+                        if wide_library_layout(ui.available_width()) {
                             ui.horizontal(|ui| {
                                 ui.vertical(|ui| {
                                     ui.set_width(LIBRARY_WIDTH);
@@ -398,7 +402,8 @@ mod tests {
         assert_eq!(LIBRARY_WIDTH, 260.0);
         assert_eq!(library_list_height(220.0), 300.0);
         assert_eq!(library_list_height(480.0), 448.0);
-        assert!(SIDE_BY_SIDE_MIN_WIDTH >= LIBRARY_WIDTH + 380.0 + 48.0);
+        assert!(!wide_library_layout(700.0));
+        assert!(wide_library_layout(732.0));
     }
 
     #[test]

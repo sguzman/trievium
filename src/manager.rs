@@ -49,13 +49,13 @@ pub enum ManagerAction {
 // comfortable in the default 780px window.
 const LIBRARY_WIDTH: f32 = 260.0;
 const SIDE_BY_SIDE_MIN_WIDTH: f32 = 715.0;
-const LIBRARY_MIN_LIST_HEIGHT: f32 = 300.0;
+const LIBRARY_MIN_HEIGHT: f32 = 350.0;
 
-// The LIBRARY heading and its spacing live above the scrollable entries.
-// Keep the list tall enough to be useful even before Hyprland resizes the
-// initial picker window into the editor.
-fn library_list_height(available_body_height: f32) -> f32 {
-    (available_body_height - 32.0).max(LIBRARY_MIN_LIST_HEIGHT)
+// A fixed-size child UI gives the library scroll area a *real* viewport.
+// A max_height on its own is only a ceiling and cannot force a short list
+// to fill the editor. The old nested outer ScrollArea also shrank this region.
+fn library_panel_height(available_body_height: f32) -> f32 {
+    available_body_height.max(LIBRARY_MIN_HEIGHT)
 }
 
 fn wide_library_layout(available_width: f32) -> bool {
@@ -233,76 +233,105 @@ impl Manager {
                 ui.separator();
                 ui.add_space(10.0);
 
-                // Measure the finite editor viewport before entering the
-                // outer scrolling region. Measuring inside it can instead
-                // yield the unbounded content height.
-                let list_height = library_list_height(ui.available_height());
-                // Both narrow and fully resized layouts must remain usable.
-                // A vertical scroll view is critical for the initial 560x175
-                // picker surface before Hyprland applies the resize.
-                egui::ScrollArea::vertical()
-                    .id_salt("manager_body")
-                    .auto_shrink([false, false])
-                    .show(ui, |ui| {
-                        let mut change_selection = None;
-                        if wide_library_layout(ui.available_width()) {
-                            ui.horizontal(|ui| {
-                                ui.vertical(|ui| {
-                                    ui.set_width(LIBRARY_WIDTH);
-                                    self.entry_list(ui, &mut change_selection, list_height);
-                                });
-                                ui.add_space(12.0);
-                                ui.separator();
-                                ui.add_space(12.0);
-                                ui.vertical(|ui| {
-                                    ui.set_min_width(380.0);
-                                    self.entry_fields(ui);
-                                });
-                            });
-                        } else {
-                            // Side-by-side min-width columns previously
-                            // overflowed to the right, hiding the form.
-                            self.entry_list(ui, &mut change_selection, list_height);
+                // On a normal-width editor, keep the content in a bounded
+                // layout: nesting vertical scroll areas caused the library to
+                // collapse to the height of just two rows.
+                let body_height = library_panel_height(ui.available_height());
+                let mut change_selection = None;
+                if wide_library_layout(ui.available_width()) {
+                    ui.horizontal(|ui| {
+                        self.library_panel(
+                            ui,
+                            &mut change_selection,
+                            LIBRARY_WIDTH,
+                            body_height,
+                        );
+                        ui.add_space(12.0);
+                        ui.separator();
+                        ui.add_space(12.0);
+                        ui.vertical(|ui| {
+                            ui.set_min_width(380.0);
+                            self.entry_fields(ui);
+                        });
+                    });
+                } else {
+                    // Narrow / temporarily unresized windows retain an outer
+                    // scroll area so the entry form can always be reached.
+                    egui::ScrollArea::vertical()
+                        .id_salt("manager_body_narrow")
+                        .show(ui, |ui| {
+                            let width = ui.available_width().min(LIBRARY_WIDTH).max(180.0);
+                            self.library_panel(
+                                ui,
+                                &mut change_selection,
+                                width,
+                                LIBRARY_MIN_HEIGHT,
+                            );
                             ui.add_space(14.0);
                             ui.separator();
                             ui.add_space(14.0);
                             self.entry_fields(ui);
-                        }
-                        if let Some(index) = change_selection {
-                            match self.finish() {
-                                Ok(()) => self.select(Some(index)),
-                                Err(error) => self.error = Some(format!("{error:#}")),
-                            }
-                        }
-                    });
+                        });
+                }
+                if let Some(index) = change_selection {
+                    match self.finish() {
+                        Ok(()) => self.select(Some(index)),
+                        Err(error) => self.error = Some(format!("{error:#}")),
+                    }
+                }
             });
         action
     }
 
-    fn entry_list(&mut self, ui: &mut egui::Ui, change: &mut Option<usize>, height: f32) {
-        ui.label(egui::RichText::new("LIBRARY").small().strong());
-        ui.add_space(8.0);
-        // Use the actual editor height; the old 190px cap forced users to
-        // scroll through a tiny list despite ample empty space below it.
-        egui::ScrollArea::vertical()
-            .id_salt("manager_entries")
-            .max_height(height)
-            .auto_shrink([false, false])
-            .show(ui, |ui| {
-                for (index, entry) in self.config.entries.iter().enumerate() {
-                    let label = format!(
-                        "{}    {}",
-                        self.map.selection_key(index).to_ascii_lowercase(),
-                        entry.label
-                    );
-                    if ui
-                        .selectable_label(self.selected == Some(index), label)
-                        .clicked()
-                    {
-                        *change = Some(index);
-                    }
-                }
-            });
+    /// Reserve a real full-height UI rectangle before inserting the scroll
+    /// area. Returning its viewport rect also lets the layout test catch
+    /// regressions where only the column width grows but the list stays tiny.
+    fn library_panel(
+        &mut self,
+        ui: &mut egui::Ui,
+        change: &mut Option<usize>,
+        width: f32,
+        height: f32,
+    ) -> egui::Rect {
+        ui.allocate_ui_with_layout(
+            egui::vec2(width, height),
+            egui::Layout::top_down(egui::Align::Min),
+            |ui| {
+                ui.set_min_size(egui::vec2(width, height));
+                ui.label(egui::RichText::new("LIBRARY").small().strong());
+                ui.add_space(8.0);
+                // No height cap: the scroll area now fills the explicitly
+                // allocated column height, including with just two entries.
+                egui::ScrollArea::vertical()
+                    .id_salt("manager_entries")
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                        for (index, entry) in self.config.entries.iter().enumerate() {
+                            let label = format!(
+                                "{}    {}",
+                                self.map.selection_key(index).to_ascii_lowercase(),
+                                entry.label
+                            );
+                            // Full-width click targets rather than tiny labels
+                            // floating in an otherwise empty 260px column.
+                            if ui
+                                .add_sized(
+                                    [ui.available_width(), 30.0],
+                                    egui::Button::selectable(
+                                        self.selected == Some(index),
+                                        label,
+                                    ),
+                                )
+                                .clicked()
+                            {
+                                *change = Some(index);
+                            }
+                        }
+                    })
+                    .inner_rect
+            },
+        )
+        .inner
     }
 
     fn input_frame<R>(ui: &mut egui::Ui, body: impl FnOnce(&mut egui::Ui) -> R) -> R {
@@ -398,12 +427,34 @@ mod tests {
     }
 
     #[test]
-    fn library_panel_uses_editor_space_instead_of_old_190px_cap() {
+    fn library_panel_gets_full_height_with_only_one_entry() {
         assert_eq!(LIBRARY_WIDTH, 260.0);
-        assert_eq!(library_list_height(220.0), 300.0);
-        assert_eq!(library_list_height(480.0), 448.0);
+        assert_eq!(library_panel_height(200.0), LIBRARY_MIN_HEIGHT);
+        assert_eq!(library_panel_height(450.0), 450.0);
         assert!(!wide_library_layout(700.0));
         assert!(wide_library_layout(732.0));
+
+        let (path, cache, config, map) = temp_config();
+        let mut manager = Manager::new(path.clone(), cache, config, map).unwrap();
+        let ctx = egui::Context::default();
+        let mut region = egui::Rect::NOTHING;
+        for _ in 0..3 {
+            let input = egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(780.0, 620.0),
+                )),
+                ..Default::default()
+            };
+            let _ = ctx.run(input, |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    region = manager.library_panel(ui, &mut None, 260.0, 410.0);
+                });
+            });
+        }
+        assert!(region.width() >= 245.0, "library too narrow: {region:?}");
+        assert!(region.height() >= 350.0, "library scroll area still collapsed: {region:?}");
+        fs::remove_dir_all(path.parent().unwrap()).unwrap();
     }
 
     #[test]

@@ -438,10 +438,8 @@ mod tests {
                 )),
                 ..Default::default()
             };
-            let _ = ctx.run(input, |ctx| {
-                egui::CentralPanel::default().show(ctx, |ui| {
-                    region = manager.library_panel(ui, &mut None, 260.0, 410.0);
-                });
+            let _ = ctx.run_ui(input, |ui| {
+                region = manager.library_panel(ui, &mut None, 260.0, 410.0);
             });
         }
         assert!(region.width() >= 245.0, "library too narrow: {region:?}");

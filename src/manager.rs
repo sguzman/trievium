@@ -255,7 +255,7 @@ impl Manager {
                     egui::ScrollArea::vertical()
                         .id_salt("manager_body_narrow")
                         .show(ui, |ui| {
-                            let width = ui.available_width().min(LIBRARY_WIDTH).max(180.0);
+                            let width = ui.available_width().clamp(180.0, LIBRARY_WIDTH);
                             self.library_panel(
                                 ui,
                                 &mut change_selection,

@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -17,8 +20,8 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libwayland-dev libegl-dev libgl-dev libxcb-shape0-dev libxcb-xfixes0-dev libxcb-render0-dev pkg-config lua5.4 sway wtype wl-clipboard libgl1-mesa-dri
       - name: Format
         run: cargo fmt --all -- --check
-      - name: Resolve dependencies
-        run: cargo generate-lockfile
+      - name: Validate locked dependency graph
+        run: cargo metadata --locked --no-deps --format-version 1 > /dev/null
       - name: Tests
         run: cargo test --locked
       - name: Clippy
@@ -45,13 +48,68 @@ jobs:
         run: bash scripts/wayland-smoke.sh
       - name: Release binary
         run: cargo build --release --locked
-      - name: Package Linux x86_64
+      - name: Package and verify Linux x86_64
         run: |
           mkdir -p dist/trievium
           cp target/release/trievium LICENSE dist/trievium/
           tar -C dist -czf dist/trievium-linux-x86_64.tar.gz trievium
+          (cd dist && sha256sum trievium-linux-x86_64.tar.gz > SHA256SUMS && sha256sum -c SHA256SUMS)
       - uses: actions/upload-artifact@v4
         with:
           name: trievium-linux-x86_64
-          path: dist/trievium-linux-x86_64.tar.gz
+          path: |
+            dist/trievium-linux-x86_64.tar.gz
+            dist/SHA256SUMS
           if-no-files-found: error
+
+  publish:
+    # Only explicit release commits on main can publish; all checks must pass first.
+    if: github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(release):')
+    needs: check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          name: trievium-linux-x86_64
+          path: dist
+      - name: Verify source version and archive checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(awk '/^\[package\]$/ { p=1; next } /^\[/ && p { exit } p && /^version = / { gsub(/"/, "", $3); print $3; exit }' Cargo.toml)
+          test -n "$version"
+          test -f "docs/releases/v${version}.md"
+          test "$GITHUB_SHA" = "$(git rev-parse HEAD)"
+          (cd dist && sha256sum -c SHA256SUMS)
+      - name: Annotate release tag and publish the checked artifact
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version=$(awk '/^\[package\]$/ { p=1; next } /^\[/ && p { exit } p && /^version = / { gsub(/"/, "", $3); print $3; exit }' Cargo.toml)
+          tag="v${version}"
+          if git ls-remote --exit-code --tags origin "refs/tags/${tag}" > /dev/null 2>&1; then
+            git fetch origin "refs/tags/${tag}:refs/tags/${tag}" || git fetch origin tag "${tag}"
+            target=$(git rev-list -n 1 "${tag}")
+            if [ "$target" != "$GITHUB_SHA" ]; then
+              echo "Refusing to retarget existing tag ${tag} (points to ${target})" >&2
+              exit 1
+            fi
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag -a "${tag}" -m "Trievium ${tag} stable release"
+            git push origin "refs/tags/${tag}"
+          fi
+          if gh release view "${tag}" > /dev/null 2>&1; then
+            echo "Release already published at verified tag: ${tag}"
+            exit 0
+          fi
+          gh release create "${tag}" dist/trievium-linux-x86_64.tar.gz dist/SHA256SUMS \
+            --title "Trievium ${tag}" --notes-file "docs/releases/${tag}.md" --verify-tag

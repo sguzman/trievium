@@ -64,7 +64,7 @@ If another instance is already open, a new invocation prints an explicit message
 
 After creating your configuration, `trievium doctor` performs a **read-only** check for Wayland session variables, the `wl-copy` program, and valid shortcuts. It does not touch the clipboard or launch a window. A passing result does not guarantee compositor focus or paste behavior; those still require real Hyprland QA.
 
-CI also produces a packaged Linux x86_64 binary from each successful run. Open the latest [GitHub Actions run](https://github.com/sguzman/trievium/actions/workflows/ci.yml), and retrieve the `trievium-linux-x86_64` build artifact. The archive contains the executable and license; extract it anywhere in your home directory and execute it. `wl-clipboard` must still be installed. This is an alternative to compiling with Cargo, not a system-wide installer.
+Stable builds are published on [GitHub Releases](https://github.com/sguzman/trievium/releases). The **v1.0.0** release includes `trievium-linux-x86_64.tar.gz` (binary plus MIT license) and `SHA256SUMS`. Keep the files together and verify with `sha256sum -c SHA256SUMS` before extracting. The executable still requires `wl-clipboard` and is not a distribution installer. Every successful CI run also carries a temporary build artifact. See the [release/compatibility policy](docs/RELEASE.md).
 
 ## Behavior
 
@@ -81,7 +81,7 @@ CI also produces a packaged Linux x86_64 binary from each successful run. Open t
 - `wl-copy` runs without `--foreground`, leaving clipboard ownership alive after the UI exits. Paste normally into the previous application.
 - Headless CI verifies Unicode and multiline bytes through the same subprocess boundary using a local file writer; it does not simulate a real Wayland clipboard.
 
-The JSON file has `version: 1` and an `entries` array. Each entry has `label` and `text`; optional `key` reserves a prefix-free shortcut. The legacy `priority` field remains readable in existing JSON but is ignored. Keys use 1-4 ASCII letters. An assigned key cannot prefix any other key. Invalid configurations (including pinned-key collisions) are rejected before launching. There is no automatic paste, command execution, network access, or telemetry.
+The on-disk library JSON schema remains **`version: 1`**, independent of application v1.0.0, and has an `entries` array. Each entry has `label` and `text`; optional `key` reserves a prefix-free shortcut. The legacy `priority` field remains readable in existing JSON but is ignored. Keys use 1-4 ASCII letters. An assigned key cannot prefix any other key. Invalid configurations (including pinned-key collisions) are rejected before launching. There is no automatic paste, command execution, network access, or telemetry.
 
 ```json
 {
@@ -95,6 +95,10 @@ The JSON file has `version: 1` and an `entries` array. Each entry has `label` an
 
 The shortcut generator tries mnemonic letters first, reserving longer-key capacity for all entries. Existing pinned and remembered codes stay stable where possible, with no numeric priority ranking. Badges display the shortest unique prefix to type, even when a reserved code is longer. **Automatic key assignments are remembered between launches**, including when new entries are added. This best-effort cache lives under `$XDG_STATE_HOME/trievium/` (normally `~/.local/state/trievium/`), with a separate cache per configuration file. It stores **labels and keys only**, never clipboard text. Pinned `key` values always take precedence. If every existing single-letter key is occupied, one or more automatic keys must change to make room; pinned keys never move. `trievium validate` prints assignments without writing the cache, and opening the picker saves them. Renaming an entry changes its identity; labels must be unique.
 
+## Stable releases and updates
+
+This project is maintained on `main`. Stable releases include an annotated `vX.Y.Z` tag, matching Cargo package version, [changelog](CHANGELOG.md), verified binary and checksum. Build locally with `cargo build --release --locked`, or download the versioned release archive. Existing `items.json` libraries are retained on upgrade. Read the [release and compatibility contract](docs/RELEASE.md) and [MVP acceptance record](docs/MVP_ACCEPTANCE.md).
+
 ## Development
 
 ```sh
@@ -107,6 +111,6 @@ See [architecture](docs/ARCHITECTURE.md) for algorithm details, constraints and 
 
 ## Status
 
-**v0.4.0 ongoing development:** file-backed plaintext selection, deterministic prefix-free assignment, CLI validation, native picker and Wayland clipboard. This is an initial implementation, with the selection and clipboard lifecycle tested on Wayland and verified by local dogfooding. No tray, background service, Lexwright integration or importing, automated typing, or generalized actions. Keeping those out of the picker is intentional.
+**v1.0.0 stable MVP:** the one-shot prefix picker, clipboard copy-and-exit, native library editor, persistent data, system light/dark appearance, and non-disruptive Hyprland floating window are accepted. Owner dogfooding and Rust/Wayland integration tests support the milestone. The feature set is closed; work after graduation is maintenance and bug fixes, not new functionality. No tray, persistent daemon, Lexwright integration/importing, automated typing, or generalized actions are promised. See [ROADMAP.md](ROADMAP.md) for the closed milestone and maintenance boundary.
 
 MIT licensed; see [LICENSE](LICENSE).

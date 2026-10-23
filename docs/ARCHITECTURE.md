@@ -65,12 +65,9 @@ Clipboard managers may record selected content. Users should not put passwords/s
 
 ## Quality / future work
 
-- Verify interactive focus, float placement, theme and latency on a real Hyprland session. CI includes an isolated Sway Wayland compositor with real virtual-keyboard selection, clipboard persistence, and Escape-to-close coverage. Actual Hyprland layout behavior still requires testing in that compositor.
-- Measure cold-start overhead and reduce it. The current UI limits initial window height and virtualizes large lists, but initial OpenGL/egui startup is not guaranteed instant; benchmark before promising latency.
-- Extend backends only after stable text/clipboard operation, with explicit and auditable actions.
-- Polish the native entry editor after real usage; do not introduce importer dependencies.
-- Continue preserving mnemonic assignments while maintaining pinned-key compatibility.
-- Accessibility options, keyboard-layout handling, pagination and big-dataset UI after dogfooding.
+v1.0.0 accepts the current core picker and editor after owner dogfooding. The user exercised Hyprland float-on-map without rearranging other windows, light/dark appearance, editing and the full-height library viewport. Latest pre-graduation CI passed Rust tests, strict Clippy, CLI smoke checks, real keyboard/clipboard Sway integration and an optimized release build. Exact release-commit CI success is still required before a tag/release can be published; see [MVP acceptance](MVP_ACCEPTANCE.md).
+
+The post-MVP work queue is **maintenance only**: reproduce and fix defects, preserve selection/clipboard invariants, update platform compatibility, security and documentation. Cold-start latency has not been benchmarked, and broad compositor compatibility is not claimed. Importers, generalized action backends and other features are outside the frozen release scope.
 
 ## Privacy
 

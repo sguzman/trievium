@@ -1,0 +1,24 @@
+# Changelog
+
+All notable Trievium changes are recorded here. Versions follow Semantic Versioning.
+
+## [1.0.0] - 2026-10-22
+
+First accepted, stable MVP release. No data migration is required from 0.4.0.
+
+### Included
+- Native Linux/Wayland Rust and egui prefix-tree picker, immediate selection at the shortest unique prefix.
+- Prefix-free 1–4 letter pinned shortcuts and mnemonic automatic assignments with a local label/key cache.
+- Exact-text clipboard handoff to `wl-copy` and immediate picker exit.
+- Native CRUD editor, persistent library, atomic save, collision validation, and external-edit protection.
+- Hyprland float-on-map behavior that does not reflow other tiled windows.
+- Desktop-following light/dark appearance and theme overrides; Luciole/Lexica preference with fallbacks.
+- Scrollable full-height library, compact picker, diagnostics and CLI validation.
+- Rust tests, strict lint, real keyboard/clipboard Wayland E2E, and verified optimized packaging.
+
+### Compatibility
+- On-disk `items.json` continues to use schema `version: 1`, independently of application v1.0.0.
+- Pinned shortcuts remain authoritative. Automatically assigned codes are best-effort stable when the library changes.
+- No daemon, auto-typing, importer or Lexwright integration is introduced.
+
+See [release policy](docs/RELEASE.md) and [acceptance evidence](docs/MVP_ACCEPTANCE.md).

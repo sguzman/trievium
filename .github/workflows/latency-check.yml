@@ -1,0 +1,51 @@
+name: Trievium startup latency validation
+on:
+  push:
+    branches: [fix/fast-popup-fonts]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Linux dependencies
+        run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libwayland-dev libegl-dev libgl-dev libxcb-shape0-dev libxcb-xfixes0-dev libxcb-render0-dev pkg-config lua5.4 sway wtype wl-clipboard libgl1-mesa-dri
+      - name: Refresh lockfile without unrelated dependency upgrades
+        run: cargo check
+      - name: Apply Rust formatting
+        run: cargo fmt --all
+      - name: Persist generated lockfile and formatting on feature branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Cargo.lock src Cargo.toml
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: refresh eframe lockfile and rustfmt"
+            git push origin HEAD:fix/fast-popup-fonts
+          fi
+      - name: Format check
+        run: cargo fmt --all -- --check
+      - name: Tests
+        run: cargo test --locked
+      - name: Clippy
+        run: cargo clippy --locked --all-targets -- -D warnings
+      - name: Build debug binary for Wayland integration
+        run: cargo build --locked
+      - name: Headless Wayland keyboard integration
+        run: bash scripts/wayland-smoke.sh
+      - name: Optimized build
+        run: cargo build --release --locked
+      - uses: actions/upload-artifact@v4
+        with:
+          name: trievium-fast-start
+          path: target/release/trievium
+          if-no-files-found: error

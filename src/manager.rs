@@ -38,7 +38,6 @@ impl EntryForm {
             color: self.color.clone(),
             // Legacy field accepted in existing JSON, no longer ranked.
             priority: 0,
-            color: None,
         }
     }
 }

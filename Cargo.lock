@@ -574,7 +574,6 @@ dependencies = [
  "egui-wgpu",
  "egui-winit",
  "egui_glow",
- "egui_system_font_provider",
  "glow",
  "glutin",
  "glutin-winit",
@@ -2626,6 +2625,7 @@ version = "1.1.0"
 dependencies = [
  "anyhow",
  "eframe",
+ "egui_system_font_provider",
  "serde",
  "serde_json",
  "zbus",

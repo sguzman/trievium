@@ -22,8 +22,7 @@ fn main() {
 
 fn run() -> Result<()> {
     // Opt-in startup trace contains only timing milestones, never user text.
-    let startup = std::env::var_os("TRIEVIUM_PROFILE_STARTUP")
-        .map(|_| Instant::now());
+    let startup = std::env::var_os("TRIEVIUM_PROFILE_STARTUP").map(|_| Instant::now());
     let mut command = "pick".to_owned();
     let mut override_path = None;
     let mut diagnose_input = false;
@@ -383,7 +382,9 @@ impl Picker {
 impl eframe::App for Picker {
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         if !self.font_load_started
-            && self.font_load_after.is_some_and(|deadline| Instant::now() >= deadline)
+            && self
+                .font_load_after
+                .is_some_and(|deadline| Instant::now() >= deadline)
         {
             self.font_load_after = None;
             self.font_load_started = true;

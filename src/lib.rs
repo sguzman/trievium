@@ -1,5 +1,6 @@
 pub mod appearance;
 pub mod clipboard;
+pub mod colors;
 pub mod config;
 pub mod hyprland;
 pub mod input;

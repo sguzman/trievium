@@ -141,6 +141,7 @@ fn run() -> Result<()> {
                 diagnose_input,
                 last_focus: None,
                 font_load_after: None,
+                font_load_started: false,
                 startup,
             };
             picker.refresh_choices();
@@ -272,6 +273,7 @@ struct Picker {
     last_focus: Option<bool>,
     // First paint has priority over font discovery and fontconfig subprocesses.
     font_load_after: Option<Instant>,
+    font_load_started: bool,
     startup: Option<Instant>,
 }
 
@@ -380,8 +382,11 @@ impl Picker {
 
 impl eframe::App for Picker {
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        if self.font_load_after.is_some_and(|deadline| Instant::now() >= deadline) {
+        if !self.font_load_started
+            && self.font_load_after.is_some_and(|deadline| Instant::now() >= deadline)
+        {
             self.font_load_after = None;
+            self.font_load_started = true;
             trievium::typography::install_async(ctx);
         }
     }
@@ -393,7 +398,7 @@ impl eframe::App for Picker {
                 start.elapsed().as_millis()
             );
         }
-        if self.font_load_after.is_none() {
+        if !self.font_load_started && self.font_load_after.is_none() {
             // Mark a sentinel so one-shot launchers that exit before a second
             // frame never pay for optional fonts at all. The work begins only
             // on a later logic pass, after the initial paint opportunity.

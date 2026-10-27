@@ -448,13 +448,17 @@ impl eframe::App for Picker {
                                 .show(ui, |ui| {
                                     ui.horizontal(|ui| {
                                         let accent = trievium::colors::for_label(
-                                            &entry.label, entry.color.as_deref(),
+                                            &entry.label,
+                                            entry.color.as_deref(),
                                         );
                                         let (rect, _) = ui.allocate_exact_size(
-                                            egui::vec2(8.0, 20.0), egui::Sense::hover(),
+                                            egui::vec2(8.0, 20.0),
+                                            egui::Sense::hover(),
                                         );
                                         ui.painter().rect_filled(
-                                            rect, egui::CornerRadius::same(3), accent,
+                                            rect,
+                                            egui::CornerRadius::same(3),
+                                            accent,
                                         );
                                         let sequence =
                                             self.map.selection_key(index).to_ascii_lowercase();

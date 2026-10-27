@@ -230,13 +230,17 @@ impl Manager {
                         self.select(self.selected);
                     }
                     let can_up = self.selected.is_some_and(|index| index > 0);
-                    let can_down = self.selected.is_some_and(|index| index + 1 < self.config.entries.len());
+                    let can_down = self
+                        .selected
+                        .is_some_and(|index| index + 1 < self.config.entries.len());
                     if ui.add_enabled(can_up, egui::Button::new("↑ Up")).clicked()
                         && let Err(error) = self.move_selected(-1)
                     {
                         self.error = Some(format!("{error:#}"));
                     }
-                    if ui.add_enabled(can_down, egui::Button::new("↓ Down")).clicked()
+                    if ui
+                        .add_enabled(can_down, egui::Button::new("↓ Down"))
+                        .clicked()
                         && let Err(error) = self.move_selected(1)
                     {
                         self.error = Some(format!("{error:#}"));
@@ -341,22 +345,29 @@ impl Manager {
                     .show(ui, |ui| {
                         for (index, entry) in self.config.entries.iter().enumerate() {
                             ui.horizontal(|ui| {
-                                let accent = colors::for_label(&entry.label, entry.color.as_deref());
+                                let accent =
+                                    colors::for_label(&entry.label, entry.color.as_deref());
                                 let (rect, _) = ui.allocate_exact_size(
-                                    egui::vec2(8.0, 20.0), egui::Sense::hover(),
+                                    egui::vec2(8.0, 20.0),
+                                    egui::Sense::hover(),
                                 );
-                                ui.painter().rect_filled(
-                                    rect, egui::CornerRadius::same(3), accent,
-                                );
+                                ui.painter()
+                                    .rect_filled(rect, egui::CornerRadius::same(3), accent);
                                 let label = format!(
                                     "{}    {}",
                                     self.map.selection_key(index).to_ascii_lowercase(),
                                     entry.label
                                 );
-                                if ui.add_sized(
-                                    [ui.available_width(), 30.0],
-                                    egui::Button::selectable(self.selected == Some(index), label),
-                                ).clicked() {
+                                if ui
+                                    .add_sized(
+                                        [ui.available_width(), 30.0],
+                                        egui::Button::selectable(
+                                            self.selected == Some(index),
+                                            label,
+                                        ),
+                                    )
+                                    .clicked()
+                                {
                                     *change = Some(index);
                                 }
                             });

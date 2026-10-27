@@ -17,7 +17,9 @@ pub fn to_hex(color: Color32) -> String {
 }
 
 pub fn for_label(label: &str, override_hex: Option<&str>) -> Color32 {
-    override_hex.and_then(parse_hex).unwrap_or_else(|| auto_color(label))
+    override_hex
+        .and_then(parse_hex)
+        .unwrap_or_else(|| auto_color(label))
 }
 
 pub fn auto_color(label: &str) -> Color32 {
@@ -43,7 +45,11 @@ pub fn auto_color(label: &str) -> Color32 {
         }
     }
     let rgb = oklch_linear_rgb(l, low, hue);
-    Color32::from_rgb(linear_to_srgb(rgb[0]), linear_to_srgb(rgb[1]), linear_to_srgb(rgb[2]))
+    Color32::from_rgb(
+        linear_to_srgb(rgb[0]),
+        linear_to_srgb(rgb[1]),
+        linear_to_srgb(rgb[2]),
+    )
 }
 
 fn oklch_linear_rgb(l: f32, c: f32, h: f32) -> [f32; 3] {

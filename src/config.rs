@@ -72,7 +72,11 @@ impl Config {
             if let Some(color) = &entry.color
                 && crate::colors::parse_hex(color).is_none()
             {
-                bail!("Entry '{}' has invalid color {}; expected #RRGGBB", entry.label, color);
+                bail!(
+                    "Entry '{}' has invalid color {}; expected #RRGGBB",
+                    entry.label,
+                    color
+                );
             }
         }
         Ok(())
@@ -324,9 +328,9 @@ mod tests {
 
     #[test]
     fn legacy_entry_has_automatic_color_and_invalid_override_is_rejected() {
-        let mut config: Config = serde_json::from_str(
-            r##"{ "version":1, "entries":[{"label":"Old","text":"Text"}] }"##,
-        ).unwrap();
+        let mut config: Config =
+            serde_json::from_str(r##"{ "version":1, "entries":[{"label":"Old","text":"Text"}] }"##)
+                .unwrap();
         assert!(config.entries[0].color.is_none());
         config.validate().unwrap();
         config.entries[0].color = Some("#ABCDEF".into());

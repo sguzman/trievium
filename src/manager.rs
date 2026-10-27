@@ -500,12 +500,19 @@ mod tests {
             viewport.height() <= TEXT_EDITOR_MAX_HEIGHT + 1.0,
             "text editor grew beyond viewport: {viewport:?}"
         );
-        assert!(viewport.height() > 80.0, "editor viewport collapsed: {viewport:?}");
+        assert!(
+            viewport.height() > 80.0,
+            "editor viewport collapsed: {viewport:?}"
+        );
         assert!(
             content_size.y > viewport.height() * 2.0,
             "long text was not made scrollable: content={content_size:?}, viewport={viewport:?}"
         );
-        assert_eq!(text.lines().count(), 160, "long text was modified by layout");
+        assert_eq!(
+            text.lines().count(),
+            160,
+            "long text was modified by layout"
+        );
     }
 
     #[test]

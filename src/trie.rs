@@ -328,6 +328,7 @@ mod tests {
             text: "some text".into(),
             key: key.map(str::to_owned),
             priority,
+            color: None,
         }
     }
 

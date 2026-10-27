@@ -452,12 +452,12 @@ impl eframe::App for Picker {
                                             entry.color.as_deref(),
                                         );
                                         let (rect, _) = ui.allocate_exact_size(
-                                            egui::vec2(8.0, 20.0),
+                                            egui::vec2(22.0, 24.0),
                                             egui::Sense::hover(),
                                         );
                                         ui.painter().rect_filled(
                                             rect,
-                                            egui::CornerRadius::same(3),
+                                            egui::CornerRadius::same(5),
                                             accent,
                                         );
                                         let sequence =

@@ -56,6 +56,21 @@ pub fn load(path: &Path) -> BTreeMap<String, String> {
     }
 }
 
+/// Skip unchanged cache writes on the latency-critical picker launch path.
+/// A redundant fsync can cost far more than the whole keymap calculation.
+pub fn is_current(previous: &BTreeMap<String, String>, entries: &[Entry], map: &Keymap) -> bool {
+    let mut auto_count = 0;
+    for (index, entry) in entries.iter().enumerate() {
+        if entry.key.is_none() {
+            auto_count += 1;
+            if previous.get(&entry.label).map(String::as_str) != Some(map.key(index)) {
+                return false;
+            }
+        }
+    }
+    auto_count == previous.len()
+}
+
 pub fn save(path: &Path, entries: &[Entry], map: &Keymap) -> Result<()> {
     let data = Cache {
         version: 1,
@@ -106,6 +121,33 @@ mod tests {
             std::process::id()
         ));
         assert!(load(&path).is_empty());
+    }
+
+    #[test]
+    fn unchanged_assignments_do_not_require_disk_writes() {
+        let entries = [
+            Entry {
+                label: "Greeting".into(),
+                text: "Hello".into(),
+                key: None,
+                priority: 0,
+                color: None,
+            },
+            Entry {
+                label: "Pinned".into(),
+                text: "Hi".into(),
+                key: Some("P".into()),
+                priority: 0,
+                color: None,
+            },
+        ];
+        let map = Keymap::build(&entries).unwrap();
+        let mut old = BTreeMap::new();
+        assert!(!is_current(&old, &entries, &map));
+        old.insert("Greeting".into(), map.key(0).into());
+        assert!(is_current(&old, &entries, &map));
+        old.insert("Extra".into(), "Z".into());
+        assert!(!is_current(&old, &entries, &map));
     }
 
     #[test]

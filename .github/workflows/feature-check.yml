@@ -38,6 +38,8 @@ jobs:
         run: cargo test --locked
       - name: Clippy
         run: cargo clippy --locked --all-targets -- -D warnings
+      - name: Build debug binary for Wayland integration
+        run: cargo build --locked
       - name: Headless Wayland keyboard integration
         run: bash scripts/wayland-smoke.sh
       - name: Optimized build

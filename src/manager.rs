@@ -50,6 +50,7 @@ pub enum ManagerAction {
 const LIBRARY_WIDTH: f32 = 260.0;
 const SIDE_BY_SIDE_MIN_WIDTH: f32 = 715.0;
 const LIBRARY_MIN_HEIGHT: f32 = 350.0;
+const TEXT_EDITOR_MAX_HEIGHT: f32 = 220.0;
 
 // A fixed-size child UI gives the library scroll area a *real* viewport.
 // A max_height on its own is only a ceiling and cannot force a short list
@@ -246,7 +247,13 @@ impl Manager {
                         ui.add_space(12.0);
                         ui.vertical(|ui| {
                             ui.set_min_width(380.0);
-                            self.entry_fields(ui);
+                            // Keep the form accessible independently of the library
+                            // when a small window or long content exceeds its height.
+                            egui::ScrollArea::vertical()
+                                .id_salt("manager_form")
+                                .max_height(body_height)
+                                .auto_shrink([false, false])
+                                .show(ui, |ui| self.entry_fields(ui));
                         });
                     });
                 } else {
@@ -347,6 +354,25 @@ impl Manager {
             .inner
     }
 
+    // TextEdit grows with its content; desired_rows is only a minimum.
+    // Constrain its viewport rather than letting a long snippet push the
+    // shortcut field out of view. Scrolling never truncates the stored text.
+    fn entry_text_editor(ui: &mut egui::Ui, text: &mut String) -> (egui::Rect, egui::Vec2) {
+        let output = egui::ScrollArea::vertical()
+            .id_salt("manager_entry_text")
+            .max_height(TEXT_EDITOR_MAX_HEIGHT)
+            .auto_shrink([false, true])
+            .show(ui, |ui| {
+                ui.add(
+                    egui::TextEdit::multiline(text)
+                        .frame(egui::Frame::NONE)
+                        .desired_rows(6)
+                        .desired_width(ui.available_width().max(180.0)),
+                );
+            });
+        (output.inner_rect, output.content_size)
+    }
+
     fn entry_fields(&mut self, ui: &mut egui::Ui) {
         ui.heading(if self.selected.is_some() {
             "Edit entry"
@@ -365,12 +391,7 @@ impl Manager {
         ui.add_space(14.0);
         ui.label("Text to copy");
         Self::input_frame(ui, |ui| {
-            ui.add(
-                egui::TextEdit::multiline(&mut self.form.text)
-                    .frame(egui::Frame::NONE)
-                    .desired_rows(6)
-                    .desired_width(ui.available_width().max(180.0)),
-            );
+            Self::entry_text_editor(ui, &mut self.form.text);
         });
         ui.add_space(14.0);
         ui.horizontal_wrapped(|ui| {
@@ -449,6 +470,42 @@ mod tests {
             "library scroll area still collapsed: {region:?}"
         );
         fs::remove_dir_all(path.parent().unwrap()).unwrap();
+    }
+
+    #[test]
+    fn long_text_editor_has_bounded_scrollable_viewport() {
+        let ctx = egui::Context::default();
+        let mut text = (0..160)
+            .map(|line| format!("Line {line}: a full paragraph of copied text."))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let mut viewport = egui::Rect::NOTHING;
+        let mut content_size = egui::Vec2::ZERO;
+
+        for _ in 0..3 {
+            let input = egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(500.0, 500.0),
+                )),
+                ..Default::default()
+            };
+            ctx.run_ui(input, |ui| {
+                ui.set_width(400.0);
+                (viewport, content_size) = Manager::entry_text_editor(ui, &mut text);
+            })
+            .drop_without_applying_deltas();
+        }
+        assert!(
+            viewport.height() <= TEXT_EDITOR_MAX_HEIGHT + 1.0,
+            "text editor grew beyond viewport: {viewport:?}"
+        );
+        assert!(viewport.height() > 80.0, "editor viewport collapsed: {viewport:?}");
+        assert!(
+            content_size.y > viewport.height() * 2.0,
+            "long text was not made scrollable: content={content_size:?}, viewport={viewport:?}"
+        );
+        assert_eq!(text.lines().count(), 160, "long text was modified by layout");
     }
 
     #[test]

@@ -102,7 +102,11 @@ fn run() -> Result<()> {
             let cache_path = shortcut_cache::path_for_config(&path)?;
             let previous = shortcut_cache::load(&cache_path);
             let map = Keymap::build_with_previous(&config.entries, &previous)?;
-            if let Err(error) = shortcut_cache::save(&cache_path, &config.entries, &map) {
+            // An unchanged cache must not perform an atomic write/fsync on
+            // every popup launch; persist only real assignment changes.
+            if !shortcut_cache::is_current(&previous, &config.entries, &map)
+                && let Err(error) = shortcut_cache::save(&cache_path, &config.entries, &map)
+            {
                 eprintln!("trievium: cannot save automatic key assignments: {error:#}");
             }
             // Only a title/input row and the actual selectable entries.

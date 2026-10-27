@@ -18,6 +18,9 @@ pub struct Entry {
     pub text: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub key: Option<String>,
+    /// Optional user-selected #RRGGBB accent. Missing = stable OKLCH auto color.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
     // Legacy schema-v1 field: retained to load existing configurations.
     // It no longer affects shortcut assignment or the editor.
     #[serde(default, skip_serializing_if = "is_zero")]
@@ -65,6 +68,11 @@ impl Config {
             }
             if entry.text.is_empty() {
                 bail!("Entry '{}' has no text to copy", entry.label);
+            }
+            if let Some(color) = &entry.color
+                && crate::colors::parse_hex(color).is_none()
+            {
+                bail!("Entry '{}' has invalid color {}; expected #RRGGBB", entry.label, color);
             }
         }
         Ok(())
@@ -181,18 +189,21 @@ pub fn initialize(path: &Path) -> Result<()> {
                 text: "Hello!".into(),
                 key: Some("G".into()),
                 priority: 100,
+                color: None,
             },
             Entry {
                 label: "Acknowledgement".into(),
                 text: "Thank you, received.".into(),
                 key: None,
                 priority: 40,
+                color: None,
             },
             Entry {
                 label: "Closing".into(),
                 text: "Best regards,".into(),
                 key: None,
                 priority: 30,
+                color: None,
             },
         ],
     };
@@ -262,6 +273,7 @@ mod tests {
                 text: "Hello!".into(),
                 key: Some("E".into()),
                 priority: 0,
+                color: None,
             }],
         };
         let initial = serde_json::to_vec(&first).unwrap();
@@ -288,6 +300,7 @@ mod tests {
                 text: "X".into(),
                 key: None,
                 priority: 0,
+                color: None,
             }],
         };
         assert!(c.validate().is_err());
@@ -300,11 +313,25 @@ mod tests {
             text: "X".into(),
             key: None,
             priority: 0,
+            color: None,
         };
         let config = Config {
             version: 1,
             entries: vec![item.clone(), item],
         };
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn legacy_entry_has_automatic_color_and_invalid_override_is_rejected() {
+        let mut config: Config = serde_json::from_str(
+            r##"{ "version":1, "entries":[{"label":"Old","text":"Text"}] }"##,
+        ).unwrap();
+        assert!(config.entries[0].color.is_none());
+        config.validate().unwrap();
+        config.entries[0].color = Some("#ABCDEF".into());
+        config.validate().unwrap();
+        config.entries[0].color = Some("unsafe".into());
         assert!(config.validate().is_err());
     }
 
@@ -317,6 +344,7 @@ mod tests {
                 text: String::new(),
                 key: None,
                 priority: 0,
+                color: None,
             }],
         };
         assert!(c.validate().is_err());

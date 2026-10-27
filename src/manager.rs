@@ -690,6 +690,7 @@ mod tests {
             label: "New".into(),
             text: "Text".into(),
             key: String::new(),
+            color: None,
         };
         fs::write(&path, b"external edits").unwrap();
         assert!(mgr.save_form().is_err());

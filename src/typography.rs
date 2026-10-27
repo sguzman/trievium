@@ -56,7 +56,40 @@ fn read_installed_font(families: &[&str], bold: bool) -> Option<Vec<u8>> {
     None
 }
 
-pub fn install(ctx: &egui::Context) {
+/// Fontconfig and system-font enumeration can take hundreds of milliseconds.
+/// Run neither on the first-frame/render path. The popup uses bundled egui
+/// fonts initially; preferred body/title fonts and color emoji arrive later.
+/// Call only after allowing the first native frame to be drawn.
+pub fn install_async(ctx: &egui::Context) {
+    let custom_ctx = ctx.clone();
+    let _ = std::thread::Builder::new()
+        .name("trievium-optional-fonts".into())
+        .spawn(move || {
+            install(&custom_ctx);
+            custom_ctx.request_repaint();
+        });
+
+    let emoji_ctx = ctx.clone();
+    let _ = std::thread::Builder::new()
+        .name("trievium-emoji-fonts".into())
+        .spawn(move || {
+            use egui::{FallbackRequest, FontProvider};
+            // SystemFontProvider internally discovers fonts in another worker.
+            // Its first glyph request BLOCKS until discovery is complete.
+            // Perform that unavoidable wait here, never on the UI thread.
+            let provider = egui_system_font_provider::SystemFontProvider::new();
+            let _ = provider.font_for(&FallbackRequest {
+                cluster: "🧩",
+                family: &FontFamily::Proportional,
+            });
+            // add_font_provider invalidates cached missing glyphs and requests
+            // a repaint; color emoji appear once fonts are ready.
+            emoji_ctx.add_font_provider(Arc::new(provider));
+        });
+}
+
+/// The synchronous helper remains useful for isolated typography tests.
+fn install(ctx: &egui::Context) {
     let mut fonts = FontDefinitions::default();
     let mut title_family = FontFamily::Proportional;
 

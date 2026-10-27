@@ -8,6 +8,8 @@ All notable Trievium changes are recorded here. Versions follow Semantic Version
 - Stable, gamut-mapped OKLCH automatic accent swatches displayed before shortcuts; optional editable hex overrides.
 - Manual Up/Down reordering in the entry manager. Picker follows the saved order while pinned and remembered shortcuts retain their identity.
 - JSON schema remains `version: 1`; legacy entries use automatic colors without migration. System appearance continues following the portal.
+- Startup latency repair: postpone optional fonts and color-emoji fallback until after first paint, without blocking the UI on font enumeration; skip redundant shortcut-cache fsyncs on ordinary launches.
+- CI headless Sway benchmark: 98.9 ms to 59.8 ms median mapped-window time (seven warm rounds each, 39.5% faster); actual Hyprland performance may differ.
 
 ## [1.0.0] - 2026-10-22
 

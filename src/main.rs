@@ -2,6 +2,7 @@ use anyhow::{Context, Result, bail};
 use eframe::egui;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::time::{Duration, Instant};
 use trievium::appearance::Appearance;
 use trievium::clipboard::copy_text;
 use trievium::config::{self, Config};
@@ -20,6 +21,8 @@ fn main() {
 }
 
 fn run() -> Result<()> {
+    // Opt-in startup trace contains only timing milestones, never user text.
+    let startup = std::env::var_os("TRIEVIUM_PROFILE_STARTUP").map(|_| Instant::now());
     let mut command = "pick".to_owned();
     let mut override_path = None;
     let mut diagnose_input = false;
@@ -99,7 +102,11 @@ fn run() -> Result<()> {
             let cache_path = shortcut_cache::path_for_config(&path)?;
             let previous = shortcut_cache::load(&cache_path);
             let map = Keymap::build_with_previous(&config.entries, &previous)?;
-            if let Err(error) = shortcut_cache::save(&cache_path, &config.entries, &map) {
+            // An unchanged cache must not perform an atomic write/fsync on
+            // every popup launch; persist only real assignment changes.
+            if !shortcut_cache::is_current(&previous, &config.entries, &map)
+                && let Err(error) = shortcut_cache::save(&cache_path, &config.entries, &map)
+            {
                 eprintln!("trievium: cannot save automatic key assignments: {error:#}");
             }
             // Only a title/input row and the actual selectable entries.
@@ -136,6 +143,9 @@ fn run() -> Result<()> {
                 input_has_focus: None,
                 diagnose_input,
                 last_focus: None,
+                font_load_after: None,
+                font_load_started: false,
+                startup,
             };
             picker.refresh_choices();
             if diagnose_input {
@@ -147,6 +157,9 @@ fn run() -> Result<()> {
             }
             let native = eframe::NativeOptions {
                 renderer: eframe::Renderer::Glow,
+                // Never let eframe's first glyph fallback block while it
+                // enumerates system fonts. We add the ready provider later.
+                system_font_fallback: false,
                 viewport: egui::ViewportBuilder::default()
                     .with_title("Trievium")
                     .with_app_id("trievium")
@@ -170,7 +183,6 @@ fn run() -> Result<()> {
                 native,
                 Box::new(move |cc| {
                     appearance.configure(&cc.egui_ctx);
-                    trievium::typography::install(&cc.egui_ctx);
                     Ok(Box::new(picker))
                 }),
             )
@@ -262,6 +274,10 @@ struct Picker {
     input_has_focus: Option<bool>,
     diagnose_input: bool,
     last_focus: Option<bool>,
+    // First paint has priority over font discovery and fontconfig subprocesses.
+    font_load_after: Option<Instant>,
+    font_load_started: bool,
+    startup: Option<Instant>,
 }
 
 impl Picker {
@@ -368,7 +384,32 @@ impl Picker {
 }
 
 impl eframe::App for Picker {
+    fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        if !self.font_load_started
+            && self
+                .font_load_after
+                .is_some_and(|deadline| Instant::now() >= deadline)
+        {
+            self.font_load_after = None;
+            self.font_load_started = true;
+            trievium::typography::install_async(ctx);
+        }
+    }
+
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        if let Some(start) = self.startup.take() {
+            eprintln!(
+                "trievium startup: first UI pass after {} ms (not first visible pixel)",
+                start.elapsed().as_millis()
+            );
+        }
+        if !self.font_load_started && self.font_load_after.is_none() {
+            // Mark a sentinel so one-shot launchers that exit before a second
+            // frame never pay for optional fonts at all. The work begins only
+            // on a later logic pass, after the initial paint opportunity.
+            self.font_load_after = Some(Instant::now() + Duration::from_millis(50));
+            ui.ctx().request_repaint_after(Duration::from_millis(50));
+        }
         // Paint an opaque surface in both modes. The original fixed dark
         // fill made egui's light theme unreadable.
         let theme = ui.ctx().theme();

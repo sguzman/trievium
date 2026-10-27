@@ -99,6 +99,12 @@ The shortcut generator tries mnemonic letters first, reserving longer-key capaci
 
 This project is maintained on `main`. Stable releases include an annotated `vX.Y.Z` tag, matching Cargo package version, [changelog](CHANGELOG.md), verified binary and checksum. Build locally with `cargo build --release --locked`, or download the versioned release archive. Existing `items.json` libraries are retained on upgrade. Read the [release and compatibility contract](docs/RELEASE.md) and [MVP acceptance record](docs/MVP_ACCEPTANCE.md).
 
+## Startup performance
+
+Cold-start responsiveness has priority over optional typography. The popup renders its first frame with egui's bundled fonts; fontconfig lookups and system color-emoji font discovery run **after the first paint opportunity** on workers and trigger a repaint when ready. This may briefly show fallback glyphs before colored emoji appear. An unchanged shortcut cache is not rewritten or fsynced on every invocation.
+
+Use `TRIEVIUM_PROFILE_STARTUP=1 trievium` to print milliseconds through the first UI pass (not the exact first visible pixel); this diagnostic does not print saved text. The optional `scripts/benchmark-startup.py` compares two compiled binaries on an isolated headless Sway compositor, using fixed emoji-bearing sample entries. On GitHub CI (2026-10-27, seven warm rounds each), a previous build took **98.9 ms median** to map a window versus **59.8 ms median** for the optimized build, a **39.1 ms / 39.5% improvement**. Hardware and font inventories vary; test directly on the target Hyprland desktop for true user-perceived latency.
+
 ## Development
 
 ```sh

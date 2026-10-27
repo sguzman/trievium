@@ -347,11 +347,11 @@ impl Manager {
                                 let accent =
                                     colors::for_label(&entry.label, entry.color.as_deref());
                                 let (rect, _) = ui.allocate_exact_size(
-                                    egui::vec2(8.0, 20.0),
+                                    egui::vec2(20.0, 24.0),
                                     egui::Sense::hover(),
                                 );
                                 ui.painter()
-                                    .rect_filled(rect, egui::CornerRadius::same(3), accent);
+                                    .rect_filled(rect, egui::CornerRadius::same(5), accent);
                                 let label = format!(
                                     "{}    {}",
                                     self.map.selection_key(index).to_ascii_lowercase(),

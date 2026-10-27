@@ -2,7 +2,7 @@
 
 ## Lifecycle
 
-Trievium's owner accepted the v1.0.0 MVP and closed the feature set. After graduation, changes are for defects, security/reliability, dependency compatibility, and documentation; no new features are scheduled.
+Trievium's owner accepted the v1.0.0 MVP and closed the feature set. The owner specifically reopened a small v1.1.0 scope on 2026-10-27 (emoji rendering, entry colors, ordering). Other features remain out of scope.
 
 A stable version must have matching `Cargo.toml`, `Cargo.lock`, `trievium --version`, an annotated `vX.Y.Z` tag, a GitHub Release, and a release archive with SHA-256 checksum. A source version bump alone does not complete inauguration.
 
@@ -15,7 +15,7 @@ A stable version must have matching `Cargo.toml`, `Cargo.lock`, `trievium --vers
 - **Clipboard:** exact bytes are handed to `wl-copy` and remain pasteable after Trievium exits; no automatic typing into another app.
 - **Appearance:** system theme and explicit light/dark overrides; optional fonts have fallbacks.
 
-SemVer PATCH means compatible fixes and maintenance. MINOR backward-compatible features would require the owner to reopen the frozen scope; breaking changes require MAJOR and explicit migration notes.
+SemVer PATCH means compatible fixes and maintenance. MINOR backward-compatible features require an explicit owner request, as for v1.1.0; breaking changes require MAJOR and explicit migration notes.
 
 ## Inauguration and subsequent releases
 

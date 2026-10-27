@@ -2,6 +2,13 @@
 
 All notable Trievium changes are recorded here. Versions follow Semantic Versioning.
 
+## [1.1.0] - 2026-10-27
+
+- Native system-font fallback with full-color emoji rendering where a color emoji font is installed (egui 0.37).
+- Stable, gamut-mapped OKLCH automatic accent swatches displayed before shortcuts; optional editable hex overrides.
+- Manual Up/Down reordering in the entry manager. Picker follows the saved order while pinned and remembered shortcuts retain their identity.
+- JSON schema remains `version: 1`; legacy entries use automatic colors without migration. System appearance continues following the portal.
+
 ## [1.0.0] - 2026-10-22
 
 First accepted, stable MVP release. No data migration is required from 0.4.0.

@@ -34,7 +34,7 @@ impl Appearance {
         match self {
             Self::System => {
                 ctx.set_theme(ThemePreference::System);
-                portal_theme::follow(ctx);
+                follow_portal(ctx);
             }
             Self::Light => ctx.set_theme(ThemePreference::Light),
             Self::Dark => ctx.set_theme(ThemePreference::Dark),
@@ -63,9 +63,91 @@ impl Appearance {
     }
 }
 
+// Portal settings following, adapted for egui 0.37 from the MIT-licensed
+// portal-theme 0.1 by David M. Anderson. D-Bus work never blocks the UI.
+#[cfg(target_os = "linux")]
+fn portal_preference(value: u32) -> ThemePreference {
+    if value == 1 {
+        ThemePreference::Dark
+    } else {
+        ThemePreference::Light
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn scheme_number(value: &zbus::zvariant::Value<'_>) -> Option<u32> {
+    let mut current = value;
+    for _ in 0..4 {
+        match current {
+            zbus::zvariant::Value::U32(number) => return Some(*number),
+            zbus::zvariant::Value::Value(inner) => current = inner,
+            _ => return None,
+        }
+    }
+    None
+}
+
+#[cfg(target_os = "linux")]
+fn follow_portal(ctx: &egui::Context) {
+    let ctx = ctx.clone();
+    let _ = std::thread::Builder::new()
+        .name("trievium-portal-theme".into())
+        .spawn(move || {
+            const PORTAL: &str = "org.freedesktop.portal.Desktop";
+            const PATH: &str = "/org/freedesktop/portal/desktop";
+            const INTERFACE: &str = "org.freedesktop.portal.Settings";
+            const NAMESPACE: &str = "org.freedesktop.appearance";
+            const KEY: &str = "color-scheme";
+            let Ok(connection) = zbus::blocking::Connection::session() else {
+                return;
+            };
+            let Ok(proxy) = zbus::blocking::Proxy::new(&connection, PORTAL, PATH, INTERFACE) else {
+                return;
+            };
+            // No response is not equivalent to light mode; preserve egui's fallback.
+            let current: Result<zbus::zvariant::OwnedValue, _> =
+                proxy.call("Read", &(NAMESPACE, KEY));
+            if let Ok(value) = current
+                && let Some(number) = scheme_number(&value)
+            {
+                ctx.set_theme(portal_preference(number));
+                ctx.request_repaint();
+            }
+            let Ok(changes) = proxy.receive_signal("SettingChanged") else {
+                return;
+            };
+            for message in changes {
+                let body = message.body();
+                let Ok((namespace, key, value)) =
+                    body.deserialize::<(String, String, zbus::zvariant::Value<'_>)>()
+                else {
+                    continue;
+                };
+                if namespace == NAMESPACE
+                    && key == KEY
+                    && let Some(number) = scheme_number(&value)
+                {
+                    ctx.set_theme(portal_preference(number));
+                    ctx.request_repaint();
+                }
+            }
+        });
+}
+
+#[cfg(not(target_os = "linux"))]
+fn follow_portal(_ctx: &egui::Context) {}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn portal_scheme_zero_means_light() {
+        assert_eq!(portal_preference(0), ThemePreference::Light);
+        assert_eq!(portal_preference(1), ThemePreference::Dark);
+        assert_eq!(portal_preference(2), ThemePreference::Light);
+    }
 
     #[test]
     fn default_uses_system_appearance() {

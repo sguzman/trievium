@@ -1,6 +1,6 @@
-# Trievium — closed MVP roadmap
+# Trievium — accepted MVP and narrowly reopened feature scope
 
-All required MVP features were accepted on 2026-10-22. After v1.0.0 the roadmap is a **maintenance ledger**, not an expanding feature wishlist.
+The v1.0.0 MVP was accepted on 2026-10-22. On 2026-10-27 the owner explicitly requested a **limited v1.1.0 feature scope**: color emoji, OKLCH entry accents with manual overrides, and editor reordering. This does not reopen unrelated features.
 
 ## M0 — MVP (100% accepted scope)
 
@@ -12,14 +12,21 @@ All required MVP features were accepted on 2026-10-22. After v1.0.0 the roadmap 
 | ✅ P4 · Desktop | Non-disruptive Hyprland floating popup; system-aware light/dark | Accepted | Owner Hyprland session and QA |
 | ✅ P5 · Release readiness | Frozen contract, changelog, acceptance evidence, CI-gated package and checksum | Implemented; publication gated on green v1 CI | [MVP acceptance](docs/MVP_ACCEPTANCE.md) and [release policy](docs/RELEASE.md) |
 
-## M1 — Maintenance (continuous)
+## M1 — Owner-requested visual and ordering improvements (v1.1.0)
+
+- 🖼️ Native color emoji fallback through egui 0.37, using system-installed emoji fonts
+- 🎨 Deterministic OKLCH accent per label, with stored optional `#RRGGBB` override
+- ↕️ Persisted library order and editor move controls, without reassigning pinned shortcuts
+- 🧪 UI, configuration and compatibility tests plus Linux/Wayland validation
+
+## M2 — Maintenance (continuous)
 
 - 🐛 Investigate and correct reproducible bugs.
 - 🧪 Preserve selection, data and clipboard regressions tests.
 - 🔧 Maintain compatible Linux, Hyprland and Rust dependency support.
 - 📝 Keep patch-version release notes, verified assets and documentation accurate.
 
-A perpetual maintenance queue has no completion percentage. New capabilities are not scheduled.
+A perpetual maintenance queue has no completion percentage. No additional capabilities are scheduled beyond the specifically requested v1.1.0 improvements.
 
 ## Evidence rule
 

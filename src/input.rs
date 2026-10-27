@@ -37,6 +37,7 @@ mod tests {
             text: label.into(),
             key: Some(key.into()),
             priority: 0,
+            color: None,
         }
     }
 

@@ -110,10 +110,9 @@ fn run() -> Result<()> {
             } else {
                 (560.0, picker_height)
             };
-            // The key order and matching list change only on prefix edits,
+            // Preserve the user-defined entry order; shortcut lookup is separate.
             // never on redraw. Keep the hot UI path proportional to visible rows.
-            let mut ordered: Vec<usize> = (0..config.entries.len()).collect();
-            ordered.sort_by(|&a, &b| map.key(a).cmp(map.key(b)));
+            let ordered: Vec<usize> = (0..config.entries.len()).collect();
             let manager = if start_managing {
                 Some(Manager::new(
                     path.clone(),
@@ -297,8 +296,6 @@ impl Picker {
             (self.config, self.map) = manager.into_data();
             self.typed.clear();
             self.ordered = (0..self.config.entries.len()).collect();
-            self.ordered
-                .sort_by(|&a, &b| self.map.key(a).cmp(self.map.key(b)));
             self.refresh_choices();
             self.error = None;
             let height = picker_height(self.config.entries.len());
@@ -450,6 +447,19 @@ impl eframe::App for Picker {
                                 .inner_margin(egui::Margin::symmetric(0, 4))
                                 .show(ui, |ui| {
                                     ui.horizontal(|ui| {
+                                        let accent = trievium::colors::for_label(
+                                            &entry.label,
+                                            entry.color.as_deref(),
+                                        );
+                                        let (rect, _) = ui.allocate_exact_size(
+                                            egui::vec2(8.0, 20.0),
+                                            egui::Sense::hover(),
+                                        );
+                                        ui.painter().rect_filled(
+                                            rect,
+                                            egui::CornerRadius::same(3),
+                                            accent,
+                                        );
                                         let sequence =
                                             self.map.selection_key(index).to_ascii_lowercase();
                                         if ui

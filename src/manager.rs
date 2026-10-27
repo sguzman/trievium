@@ -1,5 +1,6 @@
 //! Native CRUD interface for local selections. The picker does not use this
 //! code during the shortcut hot path. No importers or network connections.
+use crate::colors;
 use crate::config::{self, Config, Entry};
 use crate::shortcut_cache;
 use crate::trie::Keymap;
@@ -14,12 +15,14 @@ struct EntryForm {
     label: String,
     text: String,
     key: String,
+    color: Option<String>,
 }
 impl EntryForm {
     fn from_entry(entry: &Entry) -> Self {
         Self {
             label: entry.label.clone(),
             text: entry.text.clone(),
+            color: entry.color.clone(),
             key: entry
                 .key
                 .as_deref()
@@ -32,6 +35,7 @@ impl EntryForm {
             label: self.label.trim().to_owned(),
             text: self.text.clone(),
             key: (!self.key.trim().is_empty()).then(|| self.key.trim().to_ascii_uppercase()),
+            color: self.color.clone(),
             // Legacy field accepted in existing JSON, no longer ranked.
             priority: 0,
         }
@@ -162,6 +166,20 @@ impl Manager {
         Ok(())
     }
 
+    /// Reorder saved entries without altering their pinned or remembered codes.
+    /// Finish the current edit first so neither text nor color changes are lost.
+    fn move_selected(&mut self, offset: isize) -> Result<()> {
+        self.finish()?;
+        let current = self.selected.context("Select an entry to reorder")?;
+        let target = current
+            .checked_add_signed(offset)
+            .filter(|&index| index < self.config.entries.len())
+            .context("Entry is already at the boundary")?;
+        let mut next = self.config.clone();
+        next.entries.swap(current, target);
+        self.commit(next, Some(target))
+    }
+
     fn delete_entry(&mut self) -> Result<()> {
         let index = self.selected.context("Select an entry to delete")?;
         let mut replacement = self.config.clone();
@@ -209,6 +227,22 @@ impl Manager {
                     }
                     if ui.button("Discard").clicked() {
                         self.select(self.selected);
+                    }
+                    let can_up = self.selected.is_some_and(|index| index > 0);
+                    let can_down = self
+                        .selected
+                        .is_some_and(|index| index + 1 < self.config.entries.len());
+                    if ui.add_enabled(can_up, egui::Button::new("↑ Up")).clicked()
+                        && let Err(error) = self.move_selected(-1)
+                    {
+                        self.error = Some(format!("{error:#}"));
+                    }
+                    if ui
+                        .add_enabled(can_down, egui::Button::new("↓ Down"))
+                        .clicked()
+                        && let Err(error) = self.move_selected(1)
+                    {
+                        self.error = Some(format!("{error:#}"));
                     }
                     if self.selected.is_some() && ui.button("Delete").clicked() {
                         self.confirm_delete = true;
@@ -309,22 +343,33 @@ impl Manager {
                     .auto_shrink([false, false])
                     .show(ui, |ui| {
                         for (index, entry) in self.config.entries.iter().enumerate() {
-                            let label = format!(
-                                "{}    {}",
-                                self.map.selection_key(index).to_ascii_lowercase(),
-                                entry.label
-                            );
-                            // Full-width click targets rather than tiny labels
-                            // floating in an otherwise empty 260px column.
-                            if ui
-                                .add_sized(
-                                    [ui.available_width(), 30.0],
-                                    egui::Button::selectable(self.selected == Some(index), label),
-                                )
-                                .clicked()
-                            {
-                                *change = Some(index);
-                            }
+                            ui.horizontal(|ui| {
+                                let accent =
+                                    colors::for_label(&entry.label, entry.color.as_deref());
+                                let (rect, _) = ui.allocate_exact_size(
+                                    egui::vec2(8.0, 20.0),
+                                    egui::Sense::hover(),
+                                );
+                                ui.painter()
+                                    .rect_filled(rect, egui::CornerRadius::same(3), accent);
+                                let label = format!(
+                                    "{}    {}",
+                                    self.map.selection_key(index).to_ascii_lowercase(),
+                                    entry.label
+                                );
+                                if ui
+                                    .add_sized(
+                                        [ui.available_width(), 30.0],
+                                        egui::Button::selectable(
+                                            self.selected == Some(index),
+                                            label,
+                                        ),
+                                    )
+                                    .clicked()
+                                {
+                                    *change = Some(index);
+                                }
+                            });
                         }
                     })
                     .inner_rect
@@ -395,6 +440,21 @@ impl Manager {
         });
         ui.add_space(14.0);
         ui.horizontal_wrapped(|ui| {
+            ui.label("Accent color");
+            let selected = colors::for_label(&self.form.label, self.form.color.as_deref());
+            let mut rgb = [selected.r(), selected.g(), selected.b()];
+            if ui.color_edit_button_srgb(&mut rgb).changed() {
+                self.form.color = Some(colors::to_hex(egui::Color32::from_rgb(
+                    rgb[0], rgb[1], rgb[2],
+                )));
+            }
+            ui.label(self.form.color.as_deref().unwrap_or("Automatic · OKLCH"));
+            if self.form.color.is_some() && ui.button("Auto").clicked() {
+                self.form.color = None;
+            }
+        });
+        ui.add_space(14.0);
+        ui.horizontal_wrapped(|ui| {
             ui.vertical(|ui| {
                 ui.label("Pinned shortcut");
                 Self::input_frame(ui, |ui| {
@@ -432,6 +492,7 @@ mod tests {
                 text: "Hello!".into(),
                 key: Some("G".into()),
                 priority: 0,
+                color: None,
             }],
         };
         fs::write(&path, serde_json::to_vec(&config).unwrap()).unwrap();
@@ -523,6 +584,7 @@ mod tests {
             label: "Address".into(),
             text: "123 Example St".into(),
             key: "a".into(),
+            color: None,
         };
         mgr.save_form().unwrap();
         assert_eq!(
@@ -565,6 +627,7 @@ mod tests {
             label: "Quick reply".into(),
             text: "Thanks!".into(),
             key: "q".into(),
+            color: None,
         };
         mgr.finish().unwrap();
         let saved = Config::load(&path).unwrap();
@@ -596,9 +659,36 @@ mod tests {
             label: "Conflicting".into(),
             text: "Text".into(),
             key: "GA".into(),
+            color: None,
         };
         assert!(mgr.save_form().is_err());
         assert_eq!(fs::read(&path).unwrap(), initial);
+        fs::remove_dir_all(path.parent().unwrap()).unwrap();
+    }
+
+    #[test]
+    fn color_override_and_reorder_round_trip_preserve_content_and_shortcuts() {
+        let (path, cache, config, map) = temp_config();
+        let mut mgr = Manager::new(path.clone(), cache, config, map).unwrap();
+        mgr.form = EntryForm {
+            label: "Another".into(),
+            text: "🐦 A long text survives reordering".into(),
+            key: "a".into(),
+            color: Some("#AA44CC".into()),
+        };
+        mgr.save_form().unwrap();
+        assert_eq!(mgr.selected, Some(1));
+        let pinned = mgr.map.key(1).to_string();
+        mgr.move_selected(-1).unwrap();
+        let saved = Config::load(&path).unwrap();
+        assert_eq!(saved.entries[0].label, "Another");
+        assert_eq!(saved.entries[0].color.as_deref(), Some("#AA44CC"));
+        assert_eq!(saved.entries[0].text, "🐦 A long text survives reordering");
+        assert_eq!(mgr.map.key(0), pinned);
+        assert_eq!(mgr.selected, Some(0));
+        assert!(mgr.move_selected(-1).is_err());
+        mgr.move_selected(1).unwrap();
+        assert_eq!(Config::load(&path).unwrap().entries[1].label, "Another");
         fs::remove_dir_all(path.parent().unwrap()).unwrap();
     }
 
@@ -610,6 +700,7 @@ mod tests {
             label: "New".into(),
             text: "Text".into(),
             key: String::new(),
+            color: None,
         };
         fs::write(&path, b"external edits").unwrap();
         assert!(mgr.save_form().is_err());

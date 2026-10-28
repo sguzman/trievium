@@ -7,7 +7,7 @@ Uses identical fonts/compositor/config for both builds and alternates order.
 import json
 import os
 import pathlib
-import signal
+import re
 import statistics
 import subprocess
 import sys
@@ -49,6 +49,7 @@ def main():
             "XDG_CURRENT_DESKTOP": "sway",
             "XDG_STATE_HOME": str(root / "state"),
         })
+        env["TRIEVIUM_PROFILE_STARTUP"] = "1"
         env.pop("DISPLAY", None)
         swaylog = (root / "sway.log").open("w")
         sway = subprocess.Popen(
@@ -91,13 +92,30 @@ def main():
                         [path, "--config", str(cfg)],
                         env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
                     )
+                    mapping_ms = None
                     for _ in range(400):
                         if mapped():
-                            return (time.perf_counter() - started) * 1000
+                            mapping_ms = (time.perf_counter() - started) * 1000
+                            break
                         if proc.poll() is not None:
                             raise RuntimeError(f"{path} exited early: {proc.stderr.read().decode(errors='replace')}")
                         time.sleep(0.005)
-                    raise RuntimeError(f"{path} did not map in 400 polls")
+                    if mapping_ms is None:
+                        raise RuntimeError(f"{path} did not map in 400 polls")
+                    # Keep the window open long enough to measure *async*
+                    # font readiness, not just the time it was first mapped.
+                    time.sleep(0.35)
+                    proc.terminate()
+                    _, log = proc.communicate(timeout=3)
+                    text = log.decode(errors="replace")
+                    def milestone(phase):
+                        match = re.search(rf"trievium startup: {phase} after (\d+) ms", text)
+                        return int(match.group(1)) if match else None
+                    return {
+                        "mapped": mapping_ms,
+                        "ui": milestone("first UI pass"),
+                        "emoji": milestone("color emoji provider ready"),
+                    }
                 finally:
                     if proc:
                         proc.terminate()
@@ -121,13 +139,19 @@ def main():
                     result = once(path)
                     if round_no:
                         series[label].append(result)
-                    print(f"{label} round={round_no}: {result:.1f} ms", flush=True)
+                    print(f"{label} round={round_no}: map={result['mapped']:.1f} ms first_ui={result['ui']} ms emoji_ready={result['emoji']} ms", flush=True)
 
-            old = statistics.median(series["before"])
-            new = statistics.median(series["after"])
-            print(f"Mapped-window median (7 warm rounds): before {old:.1f} ms, after {new:.1f} ms, delta {new-old:+.1f} ms", flush=True)
-            if new >= old:
-                print("WARNING: no positive improvement on this runner. Actual desktop may differ.", flush=True)
+            for metric in ("mapped", "ui", "emoji"):
+                old_values = [x[metric] for x in series["before"] if x[metric] is not None]
+                new_values = [x[metric] for x in series["after"] if x[metric] is not None]
+                if old_values and new_values:
+                    old = statistics.median(old_values)
+                    new = statistics.median(new_values)
+                    print(f"{metric} median (7 warm rounds): before {old:.1f} ms, after {new:.1f} ms, delta {new-old:+.1f} ms", flush=True)
+                    if metric in ("mapped", "ui") and new > old * 1.10:
+                        raise RuntimeError(f"Startup regression in {metric}: before={old:.1f} after={new:.1f}")
+                else:
+                    print(f"{metric}: baseline or candidate does not expose this milestone", flush=True)
         finally:
             if keyboard:
                 keyboard.terminate()

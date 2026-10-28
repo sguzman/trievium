@@ -69,7 +69,10 @@ pub fn install_async(ctx: &egui::Context, startup: Option<Instant>) {
             install(&custom_ctx);
             custom_ctx.request_repaint();
             if let Some(start) = startup {
-                eprintln!("trievium startup: optional typography ready after {} ms", start.elapsed().as_millis());
+                eprintln!(
+                    "trievium startup: optional typography ready after {} ms",
+                    start.elapsed().as_millis()
+                );
             }
         });
 
@@ -90,7 +93,10 @@ pub fn install_async(ctx: &egui::Context, startup: Option<Instant>) {
             // a repaint; color emoji appear once fonts are ready.
             emoji_ctx.add_font_provider(Arc::new(provider));
             if let Some(start) = startup {
-                eprintln!("trievium startup: color emoji provider ready after {} ms", start.elapsed().as_millis());
+                eprintln!(
+                    "trievium startup: color emoji provider ready after {} ms",
+                    start.elapsed().as_millis()
+                );
             }
         });
 }

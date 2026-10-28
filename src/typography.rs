@@ -4,6 +4,7 @@ use eframe::egui::{self, FontData, FontDefinitions, FontFamily, FontId, TextStyl
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::Arc;
+use std::time::Instant;
 
 const BODY_FAMILIES: &[&str] = &[
     "Lexica Ultralegible",
@@ -60,13 +61,16 @@ fn read_installed_font(families: &[&str], bold: bool) -> Option<Vec<u8>> {
 /// Run neither on the first-frame/render path. The popup uses bundled egui
 /// fonts initially; preferred body/title fonts and color emoji arrive later.
 /// Call only after allowing the first native frame to be drawn.
-pub fn install_async(ctx: &egui::Context) {
+pub fn install_async(ctx: &egui::Context, startup: Option<Instant>) {
     let custom_ctx = ctx.clone();
     let _ = std::thread::Builder::new()
         .name("trievium-optional-fonts".into())
         .spawn(move || {
             install(&custom_ctx);
             custom_ctx.request_repaint();
+            if let Some(start) = startup {
+                eprintln!("trievium startup: optional typography ready after {} ms", start.elapsed().as_millis());
+            }
         });
 
     let emoji_ctx = ctx.clone();
@@ -85,6 +89,9 @@ pub fn install_async(ctx: &egui::Context) {
             // add_font_provider invalidates cached missing glyphs and requests
             // a repaint; color emoji appear once fonts are ready.
             emoji_ctx.add_font_provider(Arc::new(provider));
+            if let Some(start) = startup {
+                eprintln!("trievium startup: color emoji provider ready after {} ms", start.elapsed().as_millis());
+            }
         });
 }
 

@@ -2,7 +2,7 @@ use anyhow::{Context, Result, bail};
 use eframe::egui;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use trievium::appearance::Appearance;
 use trievium::clipboard::copy_text;
 use trievium::config::{self, Config};
@@ -143,7 +143,7 @@ fn run() -> Result<()> {
                 input_has_focus: None,
                 diagnose_input,
                 last_focus: None,
-                font_load_after: None,
+                font_load_pending: false,
                 font_load_started: false,
                 startup,
             };
@@ -275,7 +275,7 @@ struct Picker {
     diagnose_input: bool,
     last_focus: Option<bool>,
     // First paint has priority over font discovery and fontconfig subprocesses.
-    font_load_after: Option<Instant>,
+    font_load_pending: bool,
     font_load_started: bool,
     startup: Option<Instant>,
 }
@@ -385,13 +385,11 @@ impl Picker {
 
 impl eframe::App for Picker {
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        if !self.font_load_started
-            && self
-                .font_load_after
-                .is_some_and(|deadline| Instant::now() >= deadline)
-        {
-            self.font_load_after = None;
+        if self.font_load_pending && !self.font_load_started {
+            self.font_load_pending = false;
             self.font_load_started = true;
+            // The first UI pass already completed before this logic callback.
+            // Fontconfig and emoji discovery run on separate workers.
             trievium::typography::install_async(ctx);
         }
     }
@@ -403,12 +401,12 @@ impl eframe::App for Picker {
                 start.elapsed().as_millis()
             );
         }
-        if !self.font_load_started && self.font_load_after.is_none() {
-            // Mark a sentinel so one-shot launchers that exit before a second
-            // frame never pay for optional fonts at all. The work begins only
-            // on a later logic pass, after the initial paint opportunity.
-            self.font_load_after = Some(Instant::now() + Duration::from_millis(50));
-            ui.ctx().request_repaint_after(Duration::from_millis(50));
+        if !self.font_load_started && !self.font_load_pending {
+            // Request a second pass immediately instead of inserting a fixed
+            // 50-ms delay. The first pass gets uninterrupted priority, while
+            // the color emoji provider can become ready sooner.
+            self.font_load_pending = true;
+            ui.ctx().request_repaint();
         }
         // Paint an opaque surface in both modes. The original fixed dark
         // fill made egui's light theme unreadable.

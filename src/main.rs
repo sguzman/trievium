@@ -102,6 +102,9 @@ fn run() -> Result<()> {
             let cache_path = shortcut_cache::path_for_config(&path)?;
             let previous = shortcut_cache::load(&cache_path);
             let map = Keymap::build_with_previous(&config.entries, &previous)?;
+            if let Some(start) = startup {
+                eprintln!("trievium startup: config and keymap ready after {} ms", start.elapsed().as_millis());
+            }
             // An unchanged cache must not perform an atomic write/fsync on
             // every popup launch; persist only real assignment changes.
             if !shortcut_cache::is_current(&previous, &config.entries, &map)
@@ -145,6 +148,7 @@ fn run() -> Result<()> {
                 last_focus: None,
                 font_load_pending: false,
                 font_load_started: false,
+                first_ui_reported: false,
                 startup,
             };
             picker.refresh_choices();
@@ -176,6 +180,9 @@ fn run() -> Result<()> {
             // Install the rule before eframe creates the Wayland surface, or
             // fail without opening a tiled fallback.
             hyprland::prepare_floating_popup().map_err(anyhow::Error::msg)?;
+            if let Some(start) = startup {
+                eprintln!("trievium startup: compositor rule ready after {} ms", start.elapsed().as_millis());
+            }
             // Only this process's already-floating window is focused/sized.
             hyprland::focus_new_popup(window_width as i32, window_height.round() as i32);
             eframe::run_native(
@@ -277,6 +284,7 @@ struct Picker {
     // First paint has priority over font discovery and fontconfig subprocesses.
     font_load_pending: bool,
     font_load_started: bool,
+    first_ui_reported: bool,
     startup: Option<Instant>,
 }
 
@@ -390,16 +398,19 @@ impl eframe::App for Picker {
             self.font_load_started = true;
             // The first UI pass already completed before this logic callback.
             // Fontconfig and emoji discovery run on separate workers.
-            trievium::typography::install_async(ctx);
+            trievium::typography::install_async(ctx, self.startup);
         }
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        if let Some(start) = self.startup.take() {
-            eprintln!(
-                "trievium startup: first UI pass after {} ms (not first visible pixel)",
-                start.elapsed().as_millis()
-            );
+        if !self.first_ui_reported {
+            self.first_ui_reported = true;
+            if let Some(start) = self.startup {
+                eprintln!(
+                    "trievium startup: first UI pass after {} ms (not first visible pixel)",
+                    start.elapsed().as_millis()
+                );
+            }
         }
         if !self.font_load_started && !self.font_load_pending {
             // Request a second pass immediately instead of inserting a fixed

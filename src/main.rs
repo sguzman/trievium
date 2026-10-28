@@ -102,6 +102,12 @@ fn run() -> Result<()> {
             let cache_path = shortcut_cache::path_for_config(&path)?;
             let previous = shortcut_cache::load(&cache_path);
             let map = Keymap::build_with_previous(&config.entries, &previous)?;
+            if let Some(start) = startup {
+                eprintln!(
+                    "trievium startup: config and keymap ready after {} ms",
+                    start.elapsed().as_millis()
+                );
+            }
             // An unchanged cache must not perform an atomic write/fsync on
             // every popup launch; persist only real assignment changes.
             if !shortcut_cache::is_current(&previous, &config.entries, &map)
@@ -176,6 +182,12 @@ fn run() -> Result<()> {
             // Install the rule before eframe creates the Wayland surface, or
             // fail without opening a tiled fallback.
             hyprland::prepare_floating_popup().map_err(anyhow::Error::msg)?;
+            if let Some(start) = startup {
+                eprintln!(
+                    "trievium startup: compositor rule ready after {} ms",
+                    start.elapsed().as_millis()
+                );
+            }
             // Only this process's already-floating window is focused/sized.
             hyprland::focus_new_popup(window_width as i32, window_height.round() as i32);
             eframe::run_native(

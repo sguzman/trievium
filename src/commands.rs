@@ -54,9 +54,8 @@ pub enum Action {
     /// Use the Hyprland dispatcher. Explicitly refocus the original window
     /// before focus-dependent commands, never the command popup.
     Hyprland {
-        dispatcher: String,
-        #[serde(default)]
-        args: String,
+        /// Hyprland 0.55+ Lua dispatcher expression.
+        expression: String,
         #[serde(default = "focus_original_by_default")]
         focus_original: bool,
     },
@@ -123,16 +122,12 @@ impl CommandConfig {
                         bail!("NUL in executable arguments for {key}");
                     }
                 }
-                Action::Hyprland {
-                    dispatcher, args, ..
-                } => {
-                    if dispatcher.is_empty()
-                        || !dispatcher
-                            .bytes()
-                            .all(|ch| ch.is_ascii_alphanumeric() || ch == b'_')
-                        || args.chars().any(|ch| matches!(ch, '\n' | '\r' | '\0'))
+                Action::Hyprland { expression, .. } => {
+                    if !expression.starts_with("hl.dsp.")
+                        || expression.len() > 4096
+                        || expression.chars().any(|ch| matches!(ch, '\n' | '\r' | '\0'))
                     {
-                        bail!("Invalid Hyprland dispatcher or arguments for {key}");
+                        bail!("Invalid Hyprland Lua dispatcher expression for {key}");
                     }
                 }
             }
@@ -279,8 +274,7 @@ fn execute(action: &Action, original: Option<&str>) -> Result<()> {
                 .with_context(|| format!("Launching {program}"))?;
         }
         Action::Hyprland {
-            dispatcher,
-            args,
+            expression,
             focus_original,
         } => {
             if std::env::var_os("HYPRLAND_INSTANCE_SIGNATURE").is_none() {
@@ -293,13 +287,13 @@ fn execute(action: &Action, original: Option<&str>) -> Result<()> {
                 hyprland::restore_original_focus(address).map_err(anyhow::Error::msg)?;
             }
             let output = Command::new("hyprctl")
-                .args(["dispatch", dispatcher, args])
+                .args(["dispatch", expression])
                 .output()
-                .with_context(|| format!("Running Hyprland dispatcher {dispatcher}"))?;
+                .with_context(|| format!("Running Hyprland Lua dispatcher {expression}"))?;
             if !output.status.success() || !String::from_utf8_lossy(&output.stdout).trim().eq("ok")
             {
                 bail!(
-                    "Hyprland rejected {dispatcher}: {} {}",
+                    "Hyprland rejected {expression}: {} {}",
                     String::from_utf8_lossy(&output.stdout).trim(),
                     String::from_utf8_lossy(&output.stderr).trim()
                 );
@@ -625,8 +619,7 @@ mod tests {
                     sequence: "w f".into(),
                     label: "Fullscreen".into(),
                     action: Action::Hyprland {
-                        dispatcher: "fullscreen".into(),
-                        args: "0".into(),
+                        expression: r#"hl.dsp.window.fullscreen({ mode = "fullscreen" })"#.into(),
                         focus_original: true,
                     },
                 },
@@ -634,8 +627,7 @@ mod tests {
                     sequence: "w c".into(),
                     label: "Close".into(),
                     action: Action::Hyprland {
-                        dispatcher: "closewindow".into(),
-                        args: String::new(),
+                        expression: "hl.dsp.window.close()".into(),
                         focus_original: true,
                     },
                 },
@@ -715,8 +707,8 @@ mod tests {
     fn accepts_empty_registry_and_rejects_malformed_actions() {
         CommandConfig::empty().validate().unwrap();
         let mut config = demo();
-        if let Action::Hyprland { dispatcher, .. } = &mut config.commands[0].action {
-            *dispatcher = "fullscreen; rm".into();
+        if let Action::Hyprland { expression, .. } = &mut config.commands[0].action {
+            *expression = "fullscreen; rm".into();
         }
         assert!(config.validate().is_err());
         assert!(serde_json::from_str::<Action>(r#"{"type":"shell","command":"echo hi"}"#).is_err());

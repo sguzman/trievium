@@ -365,6 +365,29 @@ mod tests {
     use super::*;
 
     #[test]
+    fn command_focus_gate_serializes_initial_focus_and_command_execution() {
+        use std::sync::mpsc;
+
+        let focus = CommandPopupFocus::default();
+        assert!(!focus.action_started.load(Ordering::SeqCst));
+        let initial_focus_guard = focus.gate.lock().unwrap();
+        let (ready_sender, ready_receiver) = mpsc::channel();
+        let (done_sender, done_receiver) = mpsc::channel();
+        let worker = focus.clone();
+        let thread = std::thread::spawn(move || {
+            ready_sender.send(()).unwrap();
+            worker.run_action(|| done_sender.send(()).unwrap());
+        });
+        ready_receiver.recv().unwrap();
+        assert!(done_receiver.try_recv().is_err());
+        focus.mark_action_started();
+        assert!(focus.action_started.load(Ordering::SeqCst));
+        drop(initial_focus_guard);
+        done_receiver.recv().unwrap();
+        thread.join().unwrap();
+    }
+
+    #[test]
     fn floating_resize_requires_floating_own_process_window() {
         let clients = br#"[
             {"pid":123,"class":"trievium","mapped":true,"floating":false,"address":"0x100"},

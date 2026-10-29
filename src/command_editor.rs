@@ -666,7 +666,10 @@ mod tests {
             std::thread::sleep(Duration::from_millis(20));
         }
         assert!(!editor.busy(), "external reload worker failed to complete");
-        assert!(editor.done_ready, "Done must finish after validating the new snapshot");
+        assert!(
+            editor.done_ready,
+            "Done must finish after validating the new snapshot"
+        );
         assert_eq!(editor.config.commands.len(), 1);
         assert_eq!(editor.config.commands[0].label, "Changed elsewhere");
         assert_eq!(editor.original, fs::read(&path).unwrap());

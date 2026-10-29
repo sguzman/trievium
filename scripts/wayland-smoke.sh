@@ -423,6 +423,14 @@ if [[ -z "$found" || ! -f "$fresh_commands" ]]; then
   cat "$XDG_RUNTIME_DIR/command-first-run.log" >&2
   exit 1
 fi
+# A second command HUD during first-run editing must exit as Busy,
+# not start another native window or rewrite the registry.
+timeout 5s ./target/debug/trievium commands --config "$fresh_commands" >"$XDG_RUNTIME_DIR/command-concurrent.log" 2>&1
+if ! grep -Fq 'another HUD is already open' "$XDG_RUNTIME_DIR/command-concurrent.log"; then
+  echo "Second command invocation ignored the single-instance lock" >&2
+  cat "$XDG_RUNTIME_DIR/command-concurrent.log" >&2
+  exit 1
+fi
 swaymsg -s "$sway_sock" '[app_id="trievium"] focus'
 sleep 0.2
 wtype -k Escape

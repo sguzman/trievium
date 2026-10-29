@@ -537,6 +537,83 @@ mod tests {
     use super::*;
 
     #[test]
+    fn native_delete_command_button_removes_selected_entry_and_persists() {
+        let dir = std::env::temp_dir().join(format!(
+            "trievium-command-delete-ui-test-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("commands.json");
+        let items = dir.join("items.json");
+        fs::write(&items, b"untouched clipboard library").unwrap();
+        let mut config = CommandConfig::empty();
+        config.commands.push(CommandEntry {
+            sequence: "a t".into(),
+            label: "Delete me".into(),
+            action: Action::Exec {
+                program: "true".into(),
+                args: Vec::new(),
+            },
+        });
+        fs::write(&path, serde_json::to_vec_pretty(&config).unwrap()).unwrap();
+        let mut editor = CommandEditor::new(path.clone()).unwrap();
+        editor.select_command(0);
+        let ctx = egui::Context::default();
+        let target = egui::pos2(291.0, 46.0);
+        let frame = |editor: &mut CommandEditor, events: Vec<egui::Event>, time: f64| {
+            ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(1280.0, 720.0),
+                    )),
+                    time: Some(time),
+                    events,
+                    ..Default::default()
+                },
+                |ui| {
+                    let _ = editor.ui(ui);
+                },
+            )
+            .drop_without_applying_deltas();
+        };
+        let pointer = |pressed| egui::Event::PointerButton {
+            pos: target,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        };
+        frame(&mut editor, Vec::new(), 0.0);
+        frame(
+            &mut editor,
+            vec![egui::Event::PointerMoved(target), pointer(true)],
+            0.1,
+        );
+        frame(&mut editor, vec![pointer(false)], 0.2);
+        assert_eq!(
+            editor.config.commands.len(),
+            0,
+            "native Delete button did not remove the selected command"
+        );
+        assert_eq!(editor.selected, None);
+        assert!(editor.dirty);
+        editor.begin_save(false);
+        for _ in 0..250 {
+            editor.poll_save(&ctx);
+            if !editor.busy() {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert!(!editor.busy());
+        assert!(!editor.dirty);
+        assert_eq!(CommandConfig::load(&path).unwrap().commands.len(), 0);
+        assert_eq!(fs::read(&items).unwrap(), b"untouched clipboard library");
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
     fn native_new_group_button_creates_editable_group_and_saves_it() {
         let dir = std::env::temp_dir().join(format!(
             "trievium-command-group-ui-test-{}",

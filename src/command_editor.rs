@@ -56,7 +56,7 @@ fn write_atomic(path: &Path, config: &CommandConfig, expected: &[u8]) -> Result<
             ));
             match options.open(&candidate) {
                 Ok(mut file) => {
-                    temp_path = Some(candidate);
+                    temp_path = Some(candidate.clone());
                     file.write_all(&next)?;
                     file.sync_all()?;
                     if fs::read(path)? != expected {

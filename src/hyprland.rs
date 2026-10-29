@@ -441,6 +441,25 @@ mod tests {
     }
 
     #[test]
+    fn original_focus_requires_mapped_identified_non_popup_client() {
+        let clients = br#"[
+            {"address":"0x100","class":"kitty","mapped":true},
+            {"address":"0x200","class":"trievium","mapped":true},
+            {"address":"0x300","class":"kitty","mapped":false},
+            {"address":"0x400","mapped":true},
+            {"address":"0x500","class":"","mapped":true},
+            {"address":"0x600","class":"firefox","mapped":true}
+        ]"#;
+        assert!(original_window_is_safe(clients, "0x100"));
+        assert!(original_window_is_safe(clients, "0x600"));
+        for address in ["0x200", "0x300", "0x400", "0x500", "0x700", "garbage"] {
+            assert!(!original_window_is_safe(clients, address), "{address}");
+        }
+        assert!(!original_window_is_safe(b"not json", "0x100"));
+        assert!(!original_window_is_safe(br#"{"address":"0x100"}"#, "0x100"));
+    }
+
+    #[test]
     fn rejects_invalid_window_addresses() {
         for address in ["", "0x", "0x123,activewindow", "123", "0x-1"] {
             assert!(!valid_address(address));

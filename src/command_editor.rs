@@ -252,70 +252,70 @@ impl CommandEditor {
         if let Some(index) = self.selected
             && let Some(entry) = self.config.commands.get_mut(index)
         {
-                ui.separator();
-                ui.horizontal(|ui| {
-                    ui.label("Sequence");
-                    self.dirty |= ui.text_edit_singleline(&mut entry.sequence).changed();
-                    ui.label("Label");
-                    self.dirty |= ui.text_edit_singleline(&mut entry.label).changed();
-                });
-                let is_exec = matches!(entry.action, Action::Exec { .. });
-                ui.horizontal(|ui| {
-                    if ui.radio(is_exec, "Program").clicked() && !is_exec {
-                        entry.action = Action::Exec {
-                            program: String::new(),
-                            args: Vec::new(),
+            ui.separator();
+            ui.horizontal(|ui| {
+                ui.label("Sequence");
+                self.dirty |= ui.text_edit_singleline(&mut entry.sequence).changed();
+                ui.label("Label");
+                self.dirty |= ui.text_edit_singleline(&mut entry.label).changed();
+            });
+            let is_exec = matches!(entry.action, Action::Exec { .. });
+            ui.horizontal(|ui| {
+                if ui.radio(is_exec, "Program").clicked() && !is_exec {
+                    entry.action = Action::Exec {
+                        program: String::new(),
+                        args: Vec::new(),
+                    };
+                    self.dirty = true;
+                }
+                if ui.radio(!is_exec, "Hyprland").clicked() && is_exec {
+                    entry.action = Action::Hyprland {
+                        dispatcher: String::new(),
+                        args: String::new(),
+                        focus_original: true,
+                    };
+                    self.dirty = true;
+                }
+            });
+            match &mut entry.action {
+                Action::Exec { program, args } => {
+                    ui.horizontal(|ui| {
+                        ui.label("Executable");
+                        self.dirty |= ui.text_edit_singleline(program).changed();
+                    });
+                    ui.label("Arguments (one argv element per line; no shell)");
+                    let mut value = args.join("\n");
+                    if ui
+                        .add(egui::TextEdit::multiline(&mut value).desired_rows(2))
+                        .changed()
+                    {
+                        *args = if value.is_empty() {
+                            Vec::new()
+                        } else {
+                            value.split('\n').map(str::to_owned).collect()
                         };
                         self.dirty = true;
-                    }
-                    if ui.radio(!is_exec, "Hyprland").clicked() && is_exec {
-                        entry.action = Action::Hyprland {
-                            dispatcher: String::new(),
-                            args: String::new(),
-                            focus_original: true,
-                        };
-                        self.dirty = true;
-                    }
-                });
-                match &mut entry.action {
-                    Action::Exec { program, args } => {
-                        ui.horizontal(|ui| {
-                            ui.label("Executable");
-                            self.dirty |= ui.text_edit_singleline(program).changed();
-                        });
-                        ui.label("Arguments (one argv element per line; no shell)");
-                        let mut value = args.join("\n");
-                        if ui
-                            .add(egui::TextEdit::multiline(&mut value).desired_rows(2))
-                            .changed()
-                        {
-                            *args = if value.is_empty() {
-                                Vec::new()
-                            } else {
-                                value.split('\n').map(str::to_owned).collect()
-                            };
-                            self.dirty = true;
-                        }
-                    }
-                    Action::Hyprland {
-                        dispatcher,
-                        args,
-                        focus_original,
-                    } => {
-                        ui.horizontal(|ui| {
-                            ui.label("Dispatcher");
-                            self.dirty |= ui.text_edit_singleline(dispatcher).changed();
-                            ui.label("Arguments");
-                            self.dirty |= ui.text_edit_singleline(args).changed();
-                        });
-                        self.dirty |= ui
-                            .checkbox(
-                                focus_original,
-                                "Refocus the original window before executing",
-                            )
-                            .changed();
                     }
                 }
+                Action::Hyprland {
+                    dispatcher,
+                    args,
+                    focus_original,
+                } => {
+                    ui.horizontal(|ui| {
+                        ui.label("Dispatcher");
+                        self.dirty |= ui.text_edit_singleline(dispatcher).changed();
+                        ui.label("Arguments");
+                        self.dirty |= ui.text_edit_singleline(args).changed();
+                    });
+                    self.dirty |= ui
+                        .checkbox(
+                            focus_original,
+                            "Refocus the original window before executing",
+                        )
+                        .changed();
+                }
+            }
         }
 
         ui.separator();

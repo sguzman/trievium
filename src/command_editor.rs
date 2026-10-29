@@ -602,6 +602,28 @@ mod tests {
         assert!(!editor.busy());
         assert!(editor.error.is_some());
         assert_eq!(fs::read(&path).unwrap(), before);
+
+        // Completing the draft should clear that validation error on Save
+        // and persist the command through the real atomic worker.
+        editor.config.commands[0].sequence = "a t".into();
+        editor.config.commands[0].label = "Launch terminal".into();
+        editor.config.commands[0].action = Action::Exec {
+            program: "true".into(),
+            args: Vec::new(),
+        };
+        editor.begin_save(false);
+        for _ in 0..250 {
+            editor.poll_save(&ctx);
+            if !editor.busy() {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert!(!editor.busy());
+        assert!(!editor.dirty);
+        assert!(editor.error.is_none());
+        assert_eq!(CommandConfig::load(&path).unwrap().commands.len(), 1);
+        assert_ne!(fs::read(&path).unwrap(), before);
         fs::remove_dir_all(dir).unwrap();
     }
 

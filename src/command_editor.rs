@@ -456,6 +456,71 @@ mod tests {
         fs::remove_dir_all(dir).unwrap();
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn atomic_save_preserves_config_store_symlink() {
+        use std::os::unix::fs::symlink;
+
+        let dir = std::env::temp_dir().join(format!(
+            "trievium-command-symlink-test-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("dotfiles")).unwrap();
+        fs::create_dir_all(dir.join("config")).unwrap();
+        let target = dir.join("dotfiles/commands.json");
+        let link = dir.join("config/commands.json");
+        fs::write(&target, serde_json::to_vec(&CommandConfig::empty()).unwrap()).unwrap();
+        symlink(&target, &link).unwrap();
+        let editor = CommandEditor::new(link.clone()).unwrap();
+        assert_eq!(editor.target, fs::canonicalize(&target).unwrap());
+
+        let mut updated = editor.config.clone();
+        updated.commands.push(CommandEntry {
+            sequence: "a t".into(),
+            label: "Terminal".into(),
+            action: Action::Exec {
+                program: "kitty".into(),
+                args: Vec::new(),
+            },
+        });
+        write_atomic(&link, &editor.target, &updated, &editor.original).unwrap();
+        assert!(fs::symlink_metadata(&link).unwrap().file_type().is_symlink());
+        assert_eq!(fs::read_link(&link).unwrap(), target);
+        assert_eq!(CommandConfig::load(&target).unwrap().commands.len(), 1);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn changing_config_store_link_never_overwrites_new_target() {
+        use std::os::unix::fs::symlink;
+
+        let dir = std::env::temp_dir().join(format!(
+            "trievium-command-retarget-test-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let original = dir.join("original.json");
+        let replacement = dir.join("replacement.json");
+        let link = dir.join("commands.json");
+        let base = serde_json::to_vec(&CommandConfig::empty()).unwrap();
+        fs::write(&original, &base).unwrap();
+        fs::write(&replacement, &base).unwrap();
+        symlink(&original, &link).unwrap();
+        let editor = CommandEditor::new(link.clone()).unwrap();
+        fs::remove_file(&link).unwrap();
+        symlink(&replacement, &link).unwrap();
+
+        let result = write_atomic(&link, &editor.target, &editor.config, &editor.original);
+        assert!(result.is_err());
+        assert_eq!(fs::read(&replacement).unwrap(), base);
+        assert_eq!(fs::read(&original).unwrap(), base);
+        assert!(fs::symlink_metadata(&link).unwrap().file_type().is_symlink());
+        fs::remove_dir_all(dir).unwrap();
+    }
+
     #[test]
     fn atomic_command_save_detects_conflicts_without_touching_copy_data() {
         let dir = std::env::temp_dir().join(format!(

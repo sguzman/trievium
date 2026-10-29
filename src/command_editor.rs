@@ -31,6 +31,7 @@ pub struct CommandEditor {
     pending_reload: Option<PendingReload>,
     finish_after_save: bool,
     done_ready: bool,
+    confirm_exit: bool,
 }
 
 fn write_atomic(
@@ -111,6 +112,23 @@ fn read_snapshot(path: &Path) -> Result<(PathBuf, Vec<u8>, CommandConfig)> {
 }
 
 impl CommandEditor {
+    pub fn busy(&self) -> bool {
+        self.pending.is_some() || self.pending_reload.is_some()
+    }
+
+    /// False means the editor is saving/reloading or has unsaved changes
+    /// that require explicit confirmation before it can be dismissed.
+    pub fn close_requested(&mut self) -> bool {
+        if self.busy() {
+            return false;
+        }
+        if self.dirty {
+            self.confirm_exit = true;
+            return false;
+        }
+        true
+    }
+
     pub fn new(path: PathBuf) -> Result<Self> {
         let (target, original, config) = read_snapshot(&path)?;
         Ok(Self {
@@ -125,6 +143,7 @@ impl CommandEditor {
             pending_reload: None,
             finish_after_save: false,
             done_ready: false,
+            confirm_exit: false,
         })
     }
 
@@ -166,6 +185,7 @@ impl CommandEditor {
                     Ok(bytes) => {
                         self.original = bytes;
                         self.dirty = false;
+                        self.confirm_exit = false;
                         if self.finish_after_save {
                             self.done_ready = true;
                         }
@@ -207,6 +227,7 @@ impl CommandEditor {
                         self.selected = None;
                         self.error = None;
                         self.dirty = false;
+                        self.confirm_exit = false;
                         self.done_ready = false;
                     }
                     Err(error) => self.error = Some(format!("{error:#}")),
@@ -240,10 +261,26 @@ impl CommandEditor {
             discard = ui
                 .add_enabled(can_modify, egui::Button::new("Discard"))
                 .clicked();
-            close = ui.button("Close").clicked();
+            close = ui
+                .add_enabled(can_modify, egui::Button::new("Close"))
+                .clicked();
         });
-        if close {
+        if close && self.close_requested() {
             return EditorEvent::Exit;
+        }
+        if self.confirm_exit {
+            ui.horizontal(|ui| {
+                ui.colored_label(egui::Color32::YELLOW, "Unsaved edits will be lost.");
+                if ui.button("Keep editing").clicked() {
+                    self.confirm_exit = false;
+                }
+                if ui.button("Discard edits and close").clicked() {
+                    close = true;
+                }
+            });
+            if close {
+                return EditorEvent::Exit;
+            }
         }
         if discard {
             // A slow filesystem or large JSON registry must not block egui.

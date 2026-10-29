@@ -412,14 +412,18 @@ pub fn run(args: &[String]) -> Result<()> {
             .with_always_on_top(),
         ..Default::default()
     };
-    hyprland::prepare_floating_popup().map_err(anyhow::Error::msg)?;
-    let focus_state =
-        hyprland::focus_new_command_popup(width.round() as i32, height.round() as i32);
+    // Complete disk reads and editor validation *before* starting the
+    // asynchronous map/focus worker. Otherwise a slow registry load can
+    // consume the worker's bounded mapping retry window before the native
+    // window even exists, leaving the editor without keyboard focus.
     let editor = if editing {
         Some(CommandEditor::new(path.clone())?)
     } else {
         None
     };
+    hyprland::prepare_floating_popup().map_err(anyhow::Error::msg)?;
+    let focus_state =
+        hyprland::focus_new_command_popup(width.round() as i32, height.round() as i32);
     let visible_choices = config.choices("");
     let app = CommandPicker {
         config,

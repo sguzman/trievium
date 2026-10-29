@@ -270,11 +270,17 @@ echo "Wayland prefix E2E passed: unique, ambiguous, and ignored invalid letters.
 # This must not read, mutate, or replace the copy library or clipboard.
 command_config="$XDG_RUNTIME_DIR/commands.json"
 command_marker="$XDG_RUNTIME_DIR/command-completed"
+deep_marker="$XDG_RUNTIME_DIR/deep-command-completed"
 cp "$config" "$XDG_RUNTIME_DIR/copy-before-commands.json"
 cat > "$command_config" <<JSON
-{"version":1,"groups":[{"prefix":"w","label":"Window commands"}],"commands":[
+{"version":1,"groups":[
+  {"prefix":"w","label":"Window commands"},
+  {"prefix":"w a","label":"Advanced commands"}
+],"commands":[
   {"sequence":"w f","label":"Complete marker",
-   "action":{"type":"exec","program":"touch","args":["$command_marker"]}}
+   "action":{"type":"exec","program":"touch","args":["$command_marker"]}},
+  {"sequence":"w a t","label":"Deep marker",
+   "action":{"type":"exec","program":"touch","args":["$deep_marker"]}}
 ]}
 JSON
 ./target/debug/trievium commands validate --config "$command_config"
@@ -297,11 +303,59 @@ swaymsg -s "$sway_sock" '[app_id="trievium"] focus'
 sleep 0.2
 wtype w
 sleep 0.3
-if [[ -e "$command_marker" ]] || ! kill -0 "$picker_pid" 2>/dev/null; then
-  echo "Command HUD executed unique partial prefix prematurely" >&2
+if [[ -e "$command_marker" || -e "$deep_marker" ]] || ! kill -0 "$picker_pid" 2>/dev/null; then
+  echo "Command HUD executed partial prefix prematurely" >&2
   cat "$XDG_RUNTIME_DIR/commands.log" >&2
   exit 1
 fi
+wtype x
+sleep 0.15
+if [[ -e "$command_marker" || -e "$deep_marker" ]]; then
+  echo "Invalid command key triggered an action" >&2
+  exit 1
+fi
+wtype -k BackSpace
+wtype w
+wtype a
+sleep 0.15
+if [[ -e "$deep_marker" ]] || ! kill -0 "$picker_pid" 2>/dev/null; then
+  echo "Nested command prefix executed prematurely" >&2
+  exit 1
+fi
+wtype t
+for _ in $(seq 1 70); do
+  if [[ -e "$deep_marker" ]]; then
+    break
+  fi
+  sleep 0.1
+done
+if [[ ! -e "$deep_marker" ]]; then
+  echo "Backspace or three-key command traversal failed" >&2
+  cat "$XDG_RUNTIME_DIR/commands.log" >&2
+  exit 1
+fi
+wait_for_picker_exit
+
+# Reopen and verify a different command shares the first prefix.
+./target/debug/trievium commands --config "$command_config" >"$XDG_RUNTIME_DIR/commands-second.log" 2>&1 &
+picker_pid=$!
+found=""
+for _ in $(seq 1 100); do
+  found=$(swaymsg -s "$sway_sock" -t get_tree | grep -o '"app_id": "trievium"' | head -1 || true)
+  if [[ -n "$found" ]]; then
+    break
+  fi
+  sleep 0.1
+done
+if [[ -z "$found" ]]; then
+  echo "Second command HUD did not map" >&2
+  cat "$XDG_RUNTIME_DIR/commands-second.log" >&2
+  exit 1
+fi
+swaymsg -s "$sway_sock" '[app_id="trievium"] focus'
+sleep 0.2
+wtype w
+sleep 0.15
 wtype f
 for _ in $(seq 1 70); do
   if [[ -e "$command_marker" ]]; then

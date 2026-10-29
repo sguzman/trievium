@@ -345,7 +345,7 @@ pub fn run(args: &[String]) -> Result<()> {
         }
         _ => {}
     }
-    if !path.exists() && operation == "pick" {
+    if !path.exists() && matches!(operation, "pick" | "edit") {
         initialize_empty(&path)?;
     }
     let config = CommandConfig::load(&path)?;
@@ -395,6 +395,7 @@ pub fn run(args: &[String]) -> Result<()> {
         config,
         config_path: path,
         editor,
+        pending_editor: None,
         original_window,
         typed: String::new(),
         error: None,
@@ -414,10 +415,13 @@ pub fn run(args: &[String]) -> Result<()> {
     Ok(())
 }
 
+type PendingEditor = Arc<Mutex<Option<Result<CommandEditor>>>>;
+
 struct CommandPicker {
     config: CommandConfig,
     config_path: PathBuf,
     editor: Option<CommandEditor>,
+    pending_editor: Option<PendingEditor>,
     original_window: Option<String>,
     typed: String,
     error: Option<String>,
@@ -439,15 +443,22 @@ impl CommandPicker {
     }
 
     fn open_editor(&mut self, ctx: &egui::Context) {
-        match CommandEditor::new(self.config_path.clone()) {
-            Ok(editor) => {
-                self.editor = Some(editor);
-                self.typed.clear();
-                self.error = None;
-                Self::resize(ctx, 900, 680);
-            }
-            Err(error) => self.error = Some(format!("{error:#}")),
+        if self.pending_editor.is_some() || self.pending.is_some() {
+            return;
         }
+        // Never load and validate a potentially large registry on egui's UI thread.
+        let result: PendingEditor = Arc::new(Mutex::new(None));
+        let sender = Arc::clone(&result);
+        let path = self.config_path.clone();
+        self.pending_editor = Some(result);
+        self.error = None;
+        std::thread::spawn(move || {
+            let editor = CommandEditor::new(path);
+            if let Ok(mut slot) = sender.lock() {
+                *slot = Some(editor);
+            }
+        });
+        ctx.request_repaint_after(Duration::from_millis(20));
     }
 
     fn choose(&mut self, index: usize) {
@@ -480,6 +491,23 @@ impl CommandPicker {
 
 impl eframe::App for CommandPicker {
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        if let Some(pending) = &self.pending_editor {
+            let loaded = pending.lock().ok().and_then(|mut state| state.take());
+            if let Some(result) = loaded {
+                self.pending_editor = None;
+                match result {
+                    Ok(editor) => {
+                        self.editor = Some(editor);
+                        self.typed.clear();
+                        self.error = None;
+                        Self::resize(ctx, 900, 680);
+                    }
+                    Err(error) => self.error = Some(format!("{error:#}")),
+                }
+            } else {
+                ctx.request_repaint_after(Duration::from_millis(20));
+            }
+        }
         if !self.font_load_started
             && self
                 .font_load_after
@@ -517,6 +545,10 @@ impl eframe::App for CommandPicker {
         if ui.input(|input| input.key_pressed(egui::Key::Escape)) {
             std::process::exit(0);
         }
+        if self.pending_editor.is_some() {
+            ui.label("Opening command editor…");
+            return;
+        }
         if let Some(editor) = self.editor.as_mut() {
             match editor.ui(ui) {
                 EditorEvent::Stay => {}
@@ -538,7 +570,10 @@ impl eframe::App for CommandPicker {
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
                     ui.heading("Trievium / Commands");
-                    if ui.button("Edit").clicked() {
+                    if ui
+                        .add_enabled(self.pending.is_none(), egui::Button::new("Edit"))
+                        .clicked()
+                    {
                         self.open_editor(ui.ctx());
                         return;
                     }

@@ -142,6 +142,16 @@ impl CommandEditor {
         true
     }
 
+    /// The destructive confirmation must check the current worker state,
+    /// not merely a stale dialog flag set before Save or Discard began.
+    fn confirm_discard_and_close(&mut self) -> bool {
+        if self.busy() || !self.dirty || !self.confirm_exit {
+            return false;
+        }
+        self.confirm_exit = false;
+        true
+    }
+
     fn select_command(&mut self, index: usize) {
         self.selected = Some(index);
         self.args_text = match &self.config.commands[index].action {
@@ -182,6 +192,7 @@ impl CommandEditor {
             return;
         }
         self.error = None;
+        self.confirm_exit = false;
         self.finish_after_save = finish;
         let path = self.path.clone();
         let target = self.target.clone();
@@ -232,6 +243,7 @@ impl CommandEditor {
         if self.pending.is_some() || self.pending_reload.is_some() {
             return;
         }
+        self.confirm_exit = false;
         let result: PendingReload = Arc::new(Mutex::new(None));
         let sender = Arc::clone(&result);
         let path = self.path.clone();
@@ -308,11 +320,17 @@ impl CommandEditor {
                 if ui.button("Keep editing").clicked() {
                     self.confirm_exit = false;
                 }
-                if ui.button("Discard edits and close").clicked() {
+                if ui
+                    .add_enabled(
+                        can_modify && self.dirty,
+                        egui::Button::new("Discard edits and close"),
+                    )
+                    .clicked()
+                {
                     close = true;
                 }
             });
-            if close {
+            if close && self.confirm_discard_and_close() {
                 return EditorEvent::Exit;
             }
         }

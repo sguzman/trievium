@@ -71,12 +71,12 @@ impl CommandPopupFocus {
 
     pub fn recover_after_error(&self) {
         self.run_action(|| {
-            if std::env::var_os("HYPRLAND_INSTANCE_SIGNATURE").is_some_and(|s| !s.is_empty()) {
-                if let Some(address) = our_floating_window_address(std::process::id()) {
-                    let expression = format!("hl.dsp.focus({{ window = \"address:{address}\" }})");
-                    if let Err(error) = dispatch_lua(&expression) {
-                        eprintln!("trievium: could not restore command HUD focus: {error}");
-                    }
+            if std::env::var_os("HYPRLAND_INSTANCE_SIGNATURE").is_some_and(|s| !s.is_empty())
+                && let Some(address) = our_floating_window_address(std::process::id())
+            {
+                let expression = format!("hl.dsp.focus({{ window = \"address:{address}\" }})");
+                if let Err(error) = dispatch_lua(&expression) {
+                    eprintln!("trievium: could not restore command HUD focus: {error}");
                 }
             }
             self.action_started.store(false, Ordering::SeqCst);

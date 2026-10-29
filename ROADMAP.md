@@ -50,12 +50,14 @@ The original copy HUD and `items.json` must remain independent from
 
 ### Verified checkpoint and dependencies
 
-- [Green CI `f1ec2a06`](https://github.com/sguzman/trievium/actions/runs/40958445466):
-  **83 Rust tests**, strict Clippy, copy and command HUD Wayland keyboard
-  E2E, editor launch/first-run, optimized release build and checksum.
-  This confirms the compiled command-prefix index, its 10,000-command
-  limit test, and the editor's safe close-confirmation guard.
-- Prior green checks: [79 tests / prior round](https://github.com/sguzman/trievium/actions/runs/40954486737), [76 tests / round 3](https://github.com/sguzman/trievium/actions/runs/40951700563),
+- [Green CI `28b0a9d6`](https://github.com/sguzman/trievium/actions/runs/40960139391):
+  **85 Rust tests**, strict Clippy, both HUDs' headless Wayland keyboard
+  E2E, first-run editor, release build and verified package checksum.
+  The editor's unmodified **Done** now reloads and validates the current
+  disk registry on a background worker, incorporating external changes
+  or refusing a broken file rather than returning stale commands.
+- Prior green checks: [83 tests / indexed HUD](https://github.com/sguzman/trievium/actions/runs/40958445466),
+  [79 tests / prior round](https://github.com/sguzman/trievium/actions/runs/40954486737), [76 tests / round 3](https://github.com/sguzman/trievium/actions/runs/40951700563),
   [71 tests / round 2](https://github.com/sguzman/trievium/actions/runs/40944215754),
   [69 tests / initial expansion](https://github.com/sguzman/trievium/actions/runs/40939985417).
 - Additional committed fixes include relative paths, command-editor argv caching,

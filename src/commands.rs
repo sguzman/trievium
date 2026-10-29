@@ -237,6 +237,89 @@ impl CommandConfig {
     }
 }
 
+/// Immutable prefix lookup compiled before the HUD starts or on a worker
+/// after editing. Key events only access one short prefix and its children.
+struct CommandIndex {
+    branches: BTreeMap<String, Vec<Choice>>,
+    terminals: BTreeMap<String, usize>,
+}
+
+impl CommandIndex {
+    fn compile(config: &CommandConfig) -> Self {
+        let group_labels: BTreeMap<String, &str> = config
+            .groups
+            .iter()
+            .filter_map(|group| {
+                normalized(&group.prefix)
+                    .ok()
+                    .map(|prefix| (prefix, group.label.as_str()))
+            })
+            .collect();
+        let mut branches: BTreeMap<String, BTreeMap<char, Choice>> = BTreeMap::new();
+        let mut terminals = BTreeMap::new();
+
+        for (index, entry) in config.commands.iter().enumerate() {
+            let sequence = normalized(&entry.sequence).expect("validated command sequence");
+            terminals.insert(sequence.clone(), index);
+            for position in 0..sequence.len() {
+                let prefix = &sequence[..position];
+                let next = &sequence[..position + 1];
+                let key = sequence.as_bytes()[position] as char;
+                let terminal = position + 1 == sequence.len();
+                let label = if terminal {
+                    entry.label.clone()
+                } else {
+                    group_labels
+                        .get(next)
+                        .map(|label| (*label).to_owned())
+                        .unwrap_or_else(|| format!("Group {}", next.to_ascii_lowercase()))
+                };
+                branches
+                    .entry(prefix.to_owned())
+                    .or_default()
+                    .entry(key)
+                    .or_insert(Choice {
+                        key,
+                        label,
+                        terminal: terminal.then_some(index),
+                    });
+            }
+        }
+
+        Self {
+            branches: branches
+                .into_iter()
+                .map(|(prefix, children)| (prefix, children.into_values().collect()))
+                .collect(),
+            terminals,
+        }
+    }
+
+    fn choices(&self, prefix: &str) -> &[Choice] {
+        self.branches
+            .get(prefix)
+            .map(Vec::as_slice)
+            .unwrap_or(&[])
+    }
+
+    fn resolve(&self, typed: &str) -> Resolution {
+        let mut prefix = String::new();
+        for key in typed.chars() {
+            if !key.is_ascii_alphanumeric() {
+                continue;
+            }
+            prefix.push(key.to_ascii_uppercase());
+            if let Some(&index) = self.terminals.get(&prefix) {
+                return Resolution::Selected(index);
+            }
+            if !self.branches.contains_key(&prefix) {
+                prefix.pop();
+            }
+        }
+        Resolution::Continue(prefix)
+    }
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum Resolution {
     Continue(String),

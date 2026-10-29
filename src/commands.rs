@@ -57,9 +57,13 @@ pub enum Action {
         dispatcher: String,
         #[serde(default)]
         args: String,
-        #[serde(default)]
+        #[serde(default = "focus_original_by_default")]
         focus_original: bool,
     },
+}
+
+fn focus_original_by_default() -> bool {
+    true
 }
 
 fn normalized(sequence: &str) -> Result<String> {

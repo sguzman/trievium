@@ -537,6 +537,84 @@ mod tests {
     use super::*;
 
     #[test]
+    fn native_new_group_button_creates_editable_group_and_saves_it() {
+        let dir = std::env::temp_dir().join(format!(
+            "trievium-command-group-ui-test-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("commands.json");
+        let mut config = CommandConfig::empty();
+        config.commands.push(CommandEntry {
+            sequence: "a t".into(),
+            label: "Terminal".into(),
+            action: Action::Exec {
+                program: "true".into(),
+                args: Vec::new(),
+            },
+        });
+        fs::write(&path, serde_json::to_vec_pretty(&config).unwrap()).unwrap();
+        let mut editor = CommandEditor::new(path.clone()).unwrap();
+        let ctx = egui::Context::default();
+        let target = egui::pos2(121.0, 118.0);
+        let frame = |editor: &mut CommandEditor, events: Vec<egui::Event>, time: f64| {
+            ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(1280.0, 720.0),
+                    )),
+                    time: Some(time),
+                    events,
+                    ..Default::default()
+                },
+                |ui| {
+                    let _ = editor.ui(ui);
+                },
+            )
+            .drop_without_applying_deltas();
+        };
+        let pointer = |pressed| egui::Event::PointerButton {
+            pos: target,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        };
+        frame(&mut editor, Vec::new(), 0.0);
+        frame(
+            &mut editor,
+            vec![egui::Event::PointerMoved(target), pointer(true)],
+            0.1,
+        );
+        frame(&mut editor, vec![pointer(false)], 0.2);
+        assert_eq!(
+            editor.config.groups.len(),
+            1,
+            "native New group did not create a draft at the expected coordinate"
+        );
+        assert!(editor.dirty);
+        editor.config.groups[0].prefix = "a".into();
+        editor.config.groups[0].label = "Applications".into();
+        editor.begin_save(false);
+        for _ in 0..250 {
+            editor.poll_save(&ctx);
+            if !editor.busy() {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert!(!editor.busy());
+        assert!(!editor.dirty);
+        assert!(editor.error.is_none());
+        let loaded = CommandConfig::load(&path).unwrap();
+        assert_eq!(loaded.groups.len(), 1);
+        assert_eq!(loaded.groups[0].label, "Applications");
+        assert_eq!(loaded.commands.len(), 1);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
     fn native_new_command_button_creates_draft_without_overwriting_registry() {
         let dir = std::env::temp_dir().join(format!(
             "trievium-command-new-ui-test-{}",

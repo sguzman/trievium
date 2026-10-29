@@ -50,13 +50,15 @@ The original copy HUD and `items.json` must remain independent from
 
 ### Verified checkpoint and dependencies
 
-- [Green CI `28b0a9d6`](https://github.com/sguzman/trievium/actions/runs/40960139391):
-  **85 Rust tests**, strict Clippy, both HUDs' headless Wayland keyboard
-  E2E, first-run editor, release build and verified package checksum.
-  The editor's unmodified **Done** now reloads and validates the current
-  disk registry on a background worker, incorporating external changes
-  or refusing a broken file rather than returning stale commands.
-- Prior green checks: [83 tests / indexed HUD](https://github.com/sguzman/trievium/actions/runs/40958445466),
+- [Green CI `17cc5623`](https://github.com/sguzman/trievium/actions/runs/40963626290):
+  **86 Rust tests**, strict Clippy, copy/command HUD keyboard E2E, editor
+  first-run, release build and checksum. A deterministic egui pointer
+  press/release test now verifies the native **Done** control, async reload
+  and editor-to-picker completion without changing disk contents. The
+  flaky compositor-level synthetic pointer attempt was removed after
+  proving unreliable in headless Sway; it is **not** claimed as live
+  desktop acceptance.
+- Prior green checks: [85 tests / external-edit consistency](https://github.com/sguzman/trievium/actions/runs/40960139391), [83 tests / indexed HUD](https://github.com/sguzman/trievium/actions/runs/40958445466),
   [79 tests / prior round](https://github.com/sguzman/trievium/actions/runs/40954486737), [76 tests / round 3](https://github.com/sguzman/trievium/actions/runs/40951700563),
   [71 tests / round 2](https://github.com/sguzman/trievium/actions/runs/40944215754),
   [69 tests / initial expansion](https://github.com/sguzman/trievium/actions/runs/40939985417).

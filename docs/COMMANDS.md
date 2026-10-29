@@ -50,7 +50,7 @@ Example `commands.json`:
       "label": "QA workspace",
       "action": {
         "type": "hyprland",
-        "expression": "hl.dsp.focus({ workspace = 6 })",
+        "expression": "hl.dsp.focus({ workspace = \"6\" })",
         "focus_original": false
       }
     },

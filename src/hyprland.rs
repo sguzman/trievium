@@ -74,9 +74,7 @@ fn focus_when_mapped(pid: u32, width: i32, height: i32, delayed_correction: bool
             }
             // Retain the existing clipboard picker's bounded correction,
             // but never refocus the command HUD after actions may begin.
-            if delayed_correction
-                && let Err(error) = confirm_popup_focus(&address)
-            {
+            if delayed_correction && let Err(error) = confirm_popup_focus(&address) {
                 eprintln!("trievium: {error}");
             }
             return;

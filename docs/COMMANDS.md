@@ -118,7 +118,10 @@ Opening `commands edit` on a fresh installation initializes *only*
 `commands.json`; the original clipboard library is left untouched.
 The editor's filesystem reads, validation, saves and Discard reloads run
 outside egui's UI thread. Changes saved with **Done** are immediately
-available in the HUD.
+available in the HUD. **Done without local edits** still reloads and
+validates the current disk snapshot on a worker before returning to the
+HUD: external edits are incorporated rather than replaced by a stale
+in-memory tree; invalid external JSON leaves the editor open with an error.
 
 **Symlink-safe saves:** If `commands.json` is a symlink to a file in a
 managed dotfiles/configuration repository, atomic saves update that resolved
@@ -156,10 +159,11 @@ window-management behavior; only a real target-session QA run can do so.
 
 ## Acceptance and remaining work
 
-This is a first implementation slice, **not** a completed command-mode
-release. The GUI command editor and atomic external-edit-safe writes are now implemented,
-but still require CI and user-facing Hyprland dogfooding. Final release checks
-remain required. The
-copy HUD must be regression-tested throughout.
+The command HUD, native editor, conflict-safe atomic persistence, and original
+copy picker have automated Rust and headless Wayland coverage on the feature
+branch. **That does not complete desktop acceptance.** Actual Hyprland
+window focus, fullscreen/workspace action targeting and interactive editor
+CRUD/visual behavior still require testing in the owner's session. Keep the
+PR in draft and do not publish a release until those checks pass.
 
 See [ROADMAP.md](../ROADMAP.md) for evidence-weighted completion accounting.

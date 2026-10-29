@@ -191,6 +191,17 @@ impl CommandConfig {
     }
 
     fn choices(&self, prefix: &str) -> Vec<Choice> {
+        // Normalize each group once instead of rescanning every group for
+        // every command (which was quadratic on large command registries).
+        let groups: BTreeMap<String, &str> = self
+            .groups
+            .iter()
+            .filter_map(|group| {
+                normalized(&group.prefix)
+                    .ok()
+                    .map(|key| (key, group.label.as_str()))
+            })
+            .collect();
         let mut choices = BTreeMap::new();
         for (index, entry) in self.commands.iter().enumerate() {
             let Ok(sequence) = normalized(&entry.sequence) else {
@@ -205,10 +216,9 @@ impl CommandConfig {
             let label = if terminal {
                 entry.label.clone()
             } else {
-                self.groups
-                    .iter()
-                    .find(|group| normalized(&group.prefix).ok().as_deref() == Some(&next))
-                    .map(|group| group.label.clone())
+                groups
+                    .get(&next)
+                    .map(|label| (*label).to_owned())
                     .unwrap_or_else(|| format!("Group {}", next.to_ascii_lowercase()))
             };
             choices.entry(key).or_insert(Choice {

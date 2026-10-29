@@ -43,8 +43,8 @@ of acceptance criteria contributes to completion.
 
 | ID / weight | Deliverable and objective acceptance criteria | Dependencies | Status |
 | --- | --- | --- | --- |
-| 🧱 C1 · 15% | `trievium commands` CLI independent of original picker, session locking and no copy config reads/writes; copy CLI remains compatible | Existing copy app | Active — code committed, CI pending |
-| 🗂️ C2 · 20% | Versioned separate `commands.json`; invalid and conflicting sequences rejected; safe initialization and round-trip/unit tests | C1 | Active — code committed, CI pending |
+| 🧱 C1 · 15% | `trievium commands` CLI independent of original picker, session locking and no copy config reads/writes; copy CLI remains compatible | Existing copy app | ✅ Verified — full green CI, copy keyboard E2E and command CLI smoke |
+| 🗂️ C2 · 20% | Versioned separate `commands.json`; invalid and conflicting sequences rejected; safe initialization and round-trip/unit tests | C1 | ✅ Verified — configuration, collision, atomic persistence and no-copy-mutation tests |
 | ⌨️ C3 · 30% | Live native HUD, nested exact sequences, actionable commands, Escape/Backspace/click, Hyprland original-focus safety, nonblocking execution; automated and Hyprland QA | C2 | Active — implemented, CI + desktop QA pending |
 | 🛠️ C4 · 20% | Native editor for groups and command CRUD/reorder, atomic writes with external-edit conflict detection, validation, usable picker/editor transition | C2–C3 | Active — code committed, CI + UI QA pending |
 | 🧪 C5 · 15% | Regression tests for original copy mode, CI, documentation, actual Hyprland dogfooding, packaging and release readiness | C1–C4 | Pending |
@@ -53,3 +53,12 @@ of acceptance criteria contributes to completion.
 work remains active, not complete. Do not combine this new-scope percentage with
 the already accepted copy MVP. The implementation branch is
 `feature/command-tree`; see [command mode specification](docs/COMMANDS.md).
+
+**First verification checkpoint: 35%** (previous 0%; +35 percentage
+points). Evidence: [successful CI run 40939985417](https://github.com/sguzman/trievium/actions/runs/40939985417)
+validated 69 Rust unit tests, strict Clippy, CLI non-overwrite checks, copy
+clipboard regression, headless Wayland exact-command execution, and package
+checksum. C3 and C4 remain active because modern Lua dispatch and native
+command-editor QA require the newer branch checks and real Hyprland session
+verification. C5 remains pending release readiness. No main-branch merge or
+release has been performed.

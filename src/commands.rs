@@ -196,6 +196,8 @@ impl CommandConfig {
         Resolution::Continue(prefix)
     }
 
+    // Reference reducer for equivalence tests; the live HUD uses CommandIndex.
+    #[cfg(test)]
     fn choices(&self, prefix: &str) -> Vec<Choice> {
         // Normalize each group once instead of rescanning every group for
         // every command (which was quadratic on large command registries).

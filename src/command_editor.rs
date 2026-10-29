@@ -560,8 +560,8 @@ mod tests {
         })
         .drop_without_applying_deltas();
         assert!(
-            done_rect.contains(egui::pos2(300.0, 22.0)),
-            "Sway click at (300,22) missed the Done control: {done_rect:?}"
+            done_rect.contains(egui::pos2(250.0, 15.0)),
+            "Sway click at (250,15) missed the Done control: {done_rect:?}"
         );
     }
 

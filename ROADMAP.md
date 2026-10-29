@@ -50,10 +50,12 @@ The original copy HUD and `items.json` must remain independent from
 
 ### Verified checkpoint and dependencies
 
-- [Green CI `ab5efea7`](https://github.com/sguzman/trievium/actions/runs/40954486737):
-  79 Rust tests, strict Clippy, existing copy and command HUD Wayland E2E,
-  editor launch/first-run, checksum-verified Linux package.
-- Prior green checks: [76 tests / round 3](https://github.com/sguzman/trievium/actions/runs/40951700563),
+- [Green CI `f1ec2a06`](https://github.com/sguzman/trievium/actions/runs/40958445466):
+  **83 Rust tests**, strict Clippy, copy and command HUD Wayland keyboard
+  E2E, editor launch/first-run, optimized release build and checksum.
+  This confirms the compiled command-prefix index, its 10,000-command
+  limit test, and the editor's safe close-confirmation guard.
+- Prior green checks: [79 tests / prior round](https://github.com/sguzman/trievium/actions/runs/40954486737), [76 tests / round 3](https://github.com/sguzman/trievium/actions/runs/40951700563),
   [71 tests / round 2](https://github.com/sguzman/trievium/actions/runs/40944215754),
   [69 tests / initial expansion](https://github.com/sguzman/trievium/actions/runs/40939985417).
 - Additional committed fixes include relative paths, command-editor argv caching,
@@ -61,10 +63,11 @@ The original copy HUD and `items.json` must remain independent from
   prefix validation, no-render-thread I/O, symlink preservation and
   unsaved-change confirmation. Verify every later branch HEAD in CI; earlier
   green runs never prove new commits green.
-- Follow-on hardening (CI pending): reject missing/unmapped/own-class
-  compositor clients as focus targets, and finish direct-editor registry
-  reads before launching Hyprland's time-bounded popup focus worker.
-  A successful previous CI run does not verify these new commits.
+- Additional verified hardening: reject missing, unmapped and own-class
+  original focus targets; complete direct-editor registry reads before the
+  bounded popup focus worker; prevent stale close confirmation while saving.
+  Command navigation now uses an immutable prefix index compiled outside
+  egui's render thread and rebuilt on a worker after editing.
 - **Local blocker:** use the bounded [real Hyprland QA checklist](docs/COMMANDS.md)
   for reversible fullscreen on the original window, workspace switching,
   interactive command/editor CRUD, and the accepted copy picker. Headless

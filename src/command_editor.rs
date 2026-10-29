@@ -509,10 +509,8 @@ mod tests {
 
     #[test]
     fn argv_editor_cache_only_rebuilds_when_selection_changes() {
-        let dir = std::env::temp_dir().join(format!(
-            "trievium-command-argv-test-{}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("trievium-command-argv-test-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("commands.json");

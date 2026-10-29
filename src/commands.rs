@@ -395,7 +395,7 @@ pub fn run(args: &[String]) -> Result<()> {
         ..Default::default()
     };
     hyprland::prepare_floating_popup().map_err(anyhow::Error::msg)?;
-    hyprland::focus_new_command_popup(width.round() as i32, height.round() as i32);
+    let focus_state = hyprland::focus_new_command_popup(width.round() as i32, height.round() as i32);
     let editor = if editing {
         Some(CommandEditor::new(path.clone())?)
     } else {
@@ -410,6 +410,7 @@ pub fn run(args: &[String]) -> Result<()> {
         editor,
         pending_editor: None,
         original_window,
+        focus_state,
         typed: String::new(),
         error: None,
         pending: None,
@@ -440,6 +441,7 @@ struct CommandPicker {
     editor: Option<CommandEditor>,
     pending_editor: Option<PendingEditor>,
     original_window: Option<String>,
+    focus_state: hyprland::CommandPopupFocus,
     typed: String,
     error: Option<String>,
     pending: Option<Arc<Mutex<Option<Result<()>>>>>,
@@ -494,9 +496,16 @@ impl CommandPicker {
         let sender = Arc::clone(&result);
         let action = self.config.commands[index].action.clone();
         let original = self.original_window.clone();
+        let focus = self.focus_state.clone();
+        focus.mark_action_started();
         self.pending = Some(result);
         std::thread::spawn(move || {
-            let outcome = execute(&action, original.as_deref());
+            // Serialized against pending initial popup focus operations.
+            // All compositor/process calls remain off egui's UI thread.
+            let outcome = focus.run_action(|| execute(&action, original.as_deref()));
+            if outcome.is_err() {
+                focus.recover_after_error();
+            }
             if let Ok(mut slot) = sender.lock() {
                 *slot = Some(outcome);
             }
@@ -569,7 +578,7 @@ impl eframe::App for CommandPicker {
         let theme = ui.ctx().theme();
         ui.painter()
             .rect_filled(ui.max_rect(), 0.0, Appearance::background(theme));
-        if ui.input(|input| input.key_pressed(egui::Key::Escape)) {
+        if self.pending.is_none() && ui.input(|input| input.key_pressed(egui::Key::Escape)) {
             if let Some(editor) = self.editor.as_mut() {
                 if editor.close_requested() {
                     std::process::exit(0);

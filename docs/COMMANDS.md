@@ -118,7 +118,10 @@ Opening `commands edit` on a fresh installation initializes *only*
 `commands.json`; the original clipboard library is left untouched.
 The editor's filesystem reads, validation, saves and Discard reloads run
 outside egui's UI thread. Changes saved with **Done** are immediately
-available in the HUD. **Done without local edits** still reloads and
+available in the HUD. Commands and groups each have **Up** and **Down**
+controls for ordering their entries in the editor and JSON registry. The
+command HUD still orders choices by their actual shortcut keys rather than
+the order of the JSON entries. **Done without local edits** still reloads and
 validates the current disk snapshot on a worker before returning to the
 HUD: external edits are incorporated rather than replaced by a stale
 in-memory tree; invalid external JSON leaves the editor open with an error.

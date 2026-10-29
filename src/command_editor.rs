@@ -14,7 +14,15 @@ pub enum EditorEvent {
     Exit,
 }
 
-type PendingSave = Arc<Mutex<Option<Result<Vec<u8>>>>>;
+/// The UI relinquishes ownership of the registry while the save worker runs,
+/// avoiding an expensive full-library clone on the egui render thread.
+struct SaveOutcome {
+    config: CommandConfig,
+    original: Vec<u8>,
+    result: Result<Vec<u8>>,
+}
+
+type PendingSave = Arc<Mutex<Option<SaveOutcome>>>;
 type PendingReload = Arc<Mutex<Option<Result<(PathBuf, Vec<u8>, CommandConfig)>>>>;
 
 pub struct CommandEditor {
@@ -165,15 +173,19 @@ impl CommandEditor {
         self.finish_after_save = finish;
         let path = self.path.clone();
         let target = self.target.clone();
-        let original = self.original.clone();
-        let config = self.config.clone();
+        let original = std::mem::take(&mut self.original);
+        let config = std::mem::replace(&mut self.config, CommandConfig::empty());
         let answer = Arc::new(Mutex::new(None));
         let sender = Arc::clone(&answer);
         self.pending = Some(answer);
         std::thread::spawn(move || {
             let result = write_atomic(&path, &target, &config, &original);
             if let Ok(mut slot) = sender.lock() {
-                *slot = Some(result);
+                *slot = Some(SaveOutcome {
+                    config,
+                    original,
+                    result,
+                });
             }
         });
     }
@@ -181,9 +193,10 @@ impl CommandEditor {
     fn poll_save(&mut self, ctx: &egui::Context) {
         if let Some(pending) = &self.pending {
             let finished = pending.lock().ok().and_then(|mut value| value.take());
-            if let Some(result) = finished {
+            if let Some(outcome) = finished {
                 self.pending = None;
-                match result {
+                self.config = outcome.config;
+                match outcome.result {
                     Ok(bytes) => {
                         self.original = bytes;
                         self.dirty = false;
@@ -192,7 +205,10 @@ impl CommandEditor {
                             self.done_ready = true;
                         }
                     }
-                    Err(error) => self.error = Some(format!("{error:#}")),
+                    Err(error) => {
+                        self.original = outcome.original;
+                        self.error = Some(format!("{error:#}"));
+                    }
                 }
             } else {
                 ctx.request_repaint_after(Duration::from_millis(20));

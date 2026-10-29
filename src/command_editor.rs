@@ -529,10 +529,7 @@ impl CommandEditor {
                         self.dirty |= ui
                             .add(egui::TextEdit::singleline(&mut group.label).desired_width(210.0))
                             .changed();
-                        if ui
-                            .add_enabled(index > 0, egui::Button::new("Up"))
-                            .clicked()
-                        {
+                        if ui.add_enabled(index > 0, egui::Button::new("Up")).clicked() {
                             move_group = Some((index, index - 1));
                         }
                         if ui
@@ -574,10 +571,7 @@ mod tests {
         let copy_path = dir.join("items.json");
         fs::write(&copy_path, b"original clipboard data").unwrap();
         let mut config = CommandConfig::empty();
-        for (prefix, label, sequence) in [
-            ("a", "Applications", "a t"),
-            ("w", "Windows", "w f"),
-        ] {
+        for (prefix, label, sequence) in [("a", "Applications", "a t"), ("w", "Windows", "w f")] {
             config.groups.push(Group {
                 prefix: prefix.into(),
                 label: label.into(),

@@ -355,10 +355,19 @@ pub fn restore_original_focus(address: &str) -> Result<(), String> {
     dispatch_lua(&format!(
         "hl.dsp.focus({{ window = \"address:{address}\" }})"
     ))?;
-    if !is_active_window(address) {
-        return Err("Refusing to dispatch: original window did not receive focus".into());
+    // Hyprland can publish the updated activewindow state just after the
+    // dispatcher returns. Observe a bounded settling window instead of
+    // falsely rejecting a correct focus transition. Never dispatch focus
+    // again, warp the pointer, or perform these polls on the egui thread.
+    for attempt in 0..6 {
+        if is_active_window(address) {
+            return Ok(());
+        }
+        if attempt < 5 {
+            thread::sleep(Duration::from_millis(25));
+        }
     }
-    Ok(())
+    Err("Refusing to dispatch: original window did not receive focus".into())
 }
 
 #[cfg(test)]

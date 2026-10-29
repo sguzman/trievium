@@ -33,7 +33,9 @@ fn write_atomic(path: &Path, config: &CommandConfig, expected: &[u8]) -> Result<
     }
     let mut next = serde_json::to_vec_pretty(config)?;
     next.push(b'\n');
-    let parent = path.parent().context("Command file has no parent directory")?;
+    let parent = path
+        .parent()
+        .context("Command file has no parent directory")?;
     let name = path.file_name().context("Command file has no filename")?;
     let mut options = fs::OpenOptions::new();
     options.write(true).create_new(true);
@@ -60,9 +62,8 @@ fn write_atomic(path: &Path, config: &CommandConfig, expected: &[u8]) -> Result<
                     if fs::read(path)? != expected {
                         bail!("Commands changed during the save. Reopen before editing.");
                     }
-                    fs::rename(&candidate, path).with_context(|| {
-                        format!("Replacing {}", path.display())
-                    })?;
+                    fs::rename(&candidate, path)
+                        .with_context(|| format!("Replacing {}", path.display()))?;
                     return Ok(());
                 }
                 Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
@@ -160,9 +161,15 @@ impl CommandEditor {
         ui.horizontal(|ui| {
             ui.heading("Edit command tree");
             ui.separator();
-            save = ui.add_enabled(self.pending.is_none(), egui::Button::new("Save")).clicked();
-            finish = ui.add_enabled(self.pending.is_none(), egui::Button::new("Done")).clicked();
-            discard = ui.add_enabled(self.pending.is_none(), egui::Button::new("Discard")).clicked();
+            save = ui
+                .add_enabled(self.pending.is_none(), egui::Button::new("Save"))
+                .clicked();
+            finish = ui
+                .add_enabled(self.pending.is_none(), egui::Button::new("Done"))
+                .clicked();
+            discard = ui
+                .add_enabled(self.pending.is_none(), egui::Button::new("Discard"))
+                .clicked();
             close = ui.button("Close").clicked();
         });
         if close {
@@ -231,10 +238,13 @@ impl CommandEditor {
             .max_height(140.0)
             .show(ui, |ui| {
                 for (index, entry) in self.config.commands.iter().enumerate() {
-                    if ui.selectable_label(
-                        self.selected == Some(index),
-                        format!("{}  ·  {}", entry.sequence, entry.label),
-                    ).clicked() {
+                    if ui
+                        .selectable_label(
+                            self.selected == Some(index),
+                            format!("{}  ·  {}", entry.sequence, entry.label),
+                        )
+                        .clicked()
+                    {
                         self.selected = Some(index);
                     }
                 }
@@ -274,7 +284,10 @@ impl CommandEditor {
                         });
                         ui.label("Arguments (one argv element per line; no shell)");
                         let mut value = args.join("\n");
-                        if ui.add(egui::TextEdit::multiline(&mut value).desired_rows(2)).changed() {
+                        if ui
+                            .add(egui::TextEdit::multiline(&mut value).desired_rows(2))
+                            .changed()
+                        {
                             *args = if value.is_empty() {
                                 Vec::new()
                             } else {
@@ -294,10 +307,12 @@ impl CommandEditor {
                             ui.label("Arguments");
                             self.dirty |= ui.text_edit_singleline(args).changed();
                         });
-                        self.dirty |= ui.checkbox(
-                            focus_original,
-                            "Refocus the original window before executing",
-                        ).changed();
+                        self.dirty |= ui
+                            .checkbox(
+                                focus_original,
+                                "Refocus the original window before executing",
+                            )
+                            .changed();
                     }
                 }
             }
@@ -323,9 +338,9 @@ impl CommandEditor {
                 for (index, group) in self.config.groups.iter_mut().enumerate() {
                     ui.horizontal(|ui| {
                         ui.label("Prefix");
-                        self.dirty |= ui.add(
-                            egui::TextEdit::singleline(&mut group.prefix).desired_width(75.0),
-                        ).changed();
+                        self.dirty |= ui
+                            .add(egui::TextEdit::singleline(&mut group.prefix).desired_width(75.0))
+                            .changed();
                         ui.label("Label");
                         self.dirty |= ui.text_edit_singleline(&mut group.label).changed();
                         if ui.button("Remove").clicked() {
@@ -349,7 +364,8 @@ mod tests {
     #[test]
     fn atomic_command_save_detects_conflicts_without_touching_copy_data() {
         let dir = std::env::temp_dir().join(format!(
-            "trievium-command-editor-test-{}", std::process::id()
+            "trievium-command-editor-test-{}",
+            std::process::id()
         ));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
@@ -362,7 +378,10 @@ mod tests {
         config.commands.push(CommandEntry {
             label: "Launcher".into(),
             sequence: "a t".into(),
-            action: Action::Exec { program: "kitty".into(), args: Vec::new() },
+            action: Action::Exec {
+                program: "kitty".into(),
+                args: Vec::new(),
+            },
         });
         let updated = write_atomic(&path, &config, &before).unwrap();
         assert_eq!(fs::read(&path).unwrap(), updated);

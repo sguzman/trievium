@@ -471,6 +471,39 @@ mod tests {
     use super::*;
 
     #[test]
+    fn editor_never_exits_mid_save_or_discards_unsaved_changes_silently() {
+        let dir = std::env::temp_dir().join(format!(
+            "trievium-command-close-test-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("commands.json");
+        crate::commands::initialize_empty(&path).unwrap();
+        let mut editor = CommandEditor::new(path).unwrap();
+
+        editor.dirty = true;
+        assert!(!editor.close_requested());
+        assert!(editor.confirm_exit);
+        editor.confirm_exit = false;
+
+        editor.pending_reload = Some(Arc::new(Mutex::new(None)));
+        assert!(editor.busy());
+        assert!(!editor.close_requested());
+        assert!(!editor.confirm_exit);
+        editor.pending_reload = None;
+
+        editor.pending = Some(Arc::new(Mutex::new(None)));
+        assert!(editor.busy());
+        assert!(!editor.close_requested());
+        editor.pending = None;
+
+        editor.dirty = false;
+        assert!(editor.close_requested());
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
     fn new_editor_reads_current_registry_instead_of_stale_picker_state() {
         let dir = std::env::temp_dir().join(format!(
             "trievium-command-snapshot-test-{}",

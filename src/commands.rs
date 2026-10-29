@@ -937,6 +937,31 @@ mod tests {
     }
 
     #[test]
+    fn compiled_index_supports_maximum_registry_without_early_execution() {
+        let config = CommandConfig {
+            version: 1,
+            groups: Vec::new(),
+            commands: (0..10_000)
+                .map(|i| CommandEntry {
+                    sequence: format!("a{i:04}"),
+                    label: format!("Command {i}"),
+                    action: Action::Exec {
+                        program: "true".into(),
+                        args: Vec::new(),
+                    },
+                })
+                .collect(),
+        };
+        config.validate().unwrap();
+        let index = CommandIndex::compile(&config);
+        assert_eq!(index.choices("").len(), 1);
+        assert_eq!(index.choices("A").len(), 10);
+        assert_eq!(index.resolve("a9"), Resolution::Continue("A9".into()));
+        assert_eq!(index.resolve("a9999"), Resolution::Selected(9999));
+        assert_eq!(index.resolve("a0000"), Resolution::Selected(0));
+    }
+
+    #[test]
     fn nested_three_key_command_never_executes_at_an_ancestor() {
         let config = CommandConfig {
             version: 1,

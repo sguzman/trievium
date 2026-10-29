@@ -635,20 +635,27 @@ mod tests {
         editor.dirty = true;
         assert!(!editor.close_requested());
         assert!(editor.confirm_exit);
-        editor.confirm_exit = false;
 
+        // Even a stale confirmation cannot exit while a save or reload owns
+        // the configuration data, nor can it bypass the dirty-state guard.
         editor.pending_reload = Some(Arc::new(Mutex::new(None)));
         assert!(editor.busy());
         assert!(!editor.close_requested());
-        assert!(!editor.confirm_exit);
+        assert!(!editor.confirm_discard_and_close());
         editor.pending_reload = None;
 
         editor.pending = Some(Arc::new(Mutex::new(None)));
         assert!(editor.busy());
         assert!(!editor.close_requested());
+        assert!(!editor.confirm_discard_and_close());
         editor.pending = None;
 
+        // Explicit confirmation is allowed only while unsaved edits remain.
+        assert!(editor.confirm_discard_and_close());
+        assert!(!editor.confirm_discard_and_close());
+        editor.confirm_exit = true;
         editor.dirty = false;
+        assert!(!editor.confirm_discard_and_close());
         assert!(editor.close_requested());
         fs::remove_dir_all(dir).unwrap();
     }

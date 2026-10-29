@@ -33,6 +33,9 @@ pub struct CommandEditor {
     original: Vec<u8>,
     pub config: CommandConfig,
     selected: Option<usize>,
+    // Retain editable argv text across frames; never join large argument
+    // vectors on every egui repaint.
+    args_text: String,
     error: Option<String>,
     dirty: bool,
     pending: Option<PendingSave>,
@@ -139,6 +142,14 @@ impl CommandEditor {
         true
     }
 
+    fn select_command(&mut self, index: usize) {
+        self.selected = Some(index);
+        self.args_text = match &self.config.commands[index].action {
+            Action::Exec { args, .. } => args.join("\n"),
+            Action::Hyprland { .. } => String::new(),
+        };
+    }
+
     pub fn new(path: PathBuf) -> Result<Self> {
         let (target, original, config) = read_snapshot(&path)?;
         Ok(Self {
@@ -147,6 +158,7 @@ impl CommandEditor {
             original,
             config,
             selected: None,
+            args_text: String::new(),
             error: None,
             dirty: false,
             pending: None,
@@ -243,6 +255,7 @@ impl CommandEditor {
                         self.config = config;
                         self.target = target;
                         self.selected = None;
+                        self.args_text.clear();
                         self.error = None;
                         self.dirty = false;
                         self.confirm_exit = false;
@@ -336,7 +349,7 @@ impl CommandEditor {
                         args: Vec::new(),
                     },
                 });
-                self.selected = Some(self.config.commands.len() - 1);
+                self.select_command(self.config.commands.len() - 1);
                 self.dirty = true;
             }
             if let Some(index) = self.selected {
@@ -353,11 +366,13 @@ impl CommandEditor {
                 if ui.button("Delete").clicked() && index < self.config.commands.len() {
                     self.config.commands.remove(index);
                     self.selected = None;
+                    self.args_text.clear();
                     self.dirty = true;
                 }
             }
         });
 
+        let mut chosen = None;
         egui::ScrollArea::vertical()
             .id_salt("command-library")
             .max_height(140.0)
@@ -374,11 +389,14 @@ impl CommandEditor {
                             )
                             .clicked()
                         {
-                            self.selected = Some(index);
+                            chosen = Some(index);
                         }
                     });
                 }
             });
+        if let Some(index) = chosen {
+            self.select_command(index);
+        }
         if let Some(index) = self.selected
             && let Some(entry) = self.config.commands.get_mut(index)
         {
@@ -396,6 +414,7 @@ impl CommandEditor {
                         program: String::new(),
                         args: Vec::new(),
                     };
+                    self.args_text.clear();
                     self.dirty = true;
                 }
                 if ui.radio(!is_exec, "Hyprland").clicked() && is_exec {
@@ -403,6 +422,7 @@ impl CommandEditor {
                         expression: "hl.dsp.window.fullscreen({ mode = \"fullscreen\" })".into(),
                         focus_original: true,
                     };
+                    self.args_text.clear();
                     self.dirty = true;
                 }
             });
@@ -413,15 +433,14 @@ impl CommandEditor {
                         self.dirty |= ui.text_edit_singleline(program).changed();
                     });
                     ui.label("Arguments (one argv element per line; no shell)");
-                    let mut value = args.join("\n");
                     if ui
-                        .add(egui::TextEdit::multiline(&mut value).desired_rows(2))
+                        .add(egui::TextEdit::multiline(&mut self.args_text).desired_rows(2))
                         .changed()
                     {
-                        *args = if value.is_empty() {
+                        *args = if self.args_text.is_empty() {
                             Vec::new()
                         } else {
-                            value.split('\n').map(str::to_owned).collect()
+                            self.args_text.split('\n').map(str::to_owned).collect()
                         };
                         self.dirty = true;
                     }

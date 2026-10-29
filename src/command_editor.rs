@@ -632,6 +632,79 @@ mod tests {
     }
 
     #[test]
+    fn unmodified_done_reads_external_changes_before_returning_to_picker() {
+        let dir = std::env::temp_dir().join(format!(
+            "trievium-command-done-reload-test-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("commands.json");
+        crate::commands::initialize_empty(&path).unwrap();
+        let mut editor = CommandEditor::new(path.clone()).unwrap();
+
+        let mut external = CommandConfig::empty();
+        external.commands.push(CommandEntry {
+            sequence: "w f".into(),
+            label: "Changed elsewhere".into(),
+            action: Action::Exec {
+                program: "true".into(),
+                args: Vec::new(),
+            },
+        });
+        fs::write(&path, serde_json::to_vec_pretty(&external).unwrap()).unwrap();
+
+        editor.begin_save(true);
+        assert!(editor.busy());
+        assert!(!editor.done_ready);
+        let ctx = egui::Context::default();
+        for _ in 0..250 {
+            editor.poll_reload(&ctx);
+            if !editor.busy() {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert!(!editor.busy(), "external reload worker failed to complete");
+        assert!(editor.done_ready, "Done must finish after validating the new snapshot");
+        assert_eq!(editor.config.commands.len(), 1);
+        assert_eq!(editor.config.commands[0].label, "Changed elsewhere");
+        assert_eq!(editor.original, fs::read(&path).unwrap());
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn unmodified_done_rejects_broken_external_config_without_exiting() {
+        let dir = std::env::temp_dir().join(format!(
+            "trievium-command-done-invalid-test-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("commands.json");
+        crate::commands::initialize_empty(&path).unwrap();
+        let mut editor = CommandEditor::new(path.clone()).unwrap();
+
+        fs::write(&path, b"invalid external JSON").unwrap();
+        editor.begin_save(true);
+        assert!(!editor.done_ready);
+        let ctx = egui::Context::default();
+        for _ in 0..250 {
+            editor.poll_reload(&ctx);
+            if !editor.busy() {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert!(!editor.busy());
+        assert!(!editor.done_ready);
+        assert!(editor.error.is_some());
+        assert!(editor.config.commands.is_empty());
+        assert_eq!(fs::read(&path).unwrap(), b"invalid external JSON");
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
     fn editor_never_exits_mid_save_or_discards_unsaved_changes_silently() {
         let dir = std::env::temp_dir().join(format!(
             "trievium-command-close-test-{}",

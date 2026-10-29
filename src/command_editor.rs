@@ -368,7 +368,8 @@ mod tests {
     #[test]
     fn new_editor_reads_current_registry_instead_of_stale_picker_state() {
         let dir = std::env::temp_dir().join(format!(
-            "trievium-command-snapshot-test-{}", std::process::id()
+            "trievium-command-snapshot-test-{}",
+            std::process::id()
         ));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();

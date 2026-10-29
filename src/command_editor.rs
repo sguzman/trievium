@@ -554,7 +554,7 @@ mod tests {
             ui.horizontal(|ui| {
                 ui.heading("Edit command tree");
                 ui.separator();
-                ui.button("Save");
+                let _ = ui.button("Save");
                 done_rect = ui.button("Done").rect;
             });
         })

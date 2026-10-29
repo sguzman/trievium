@@ -271,7 +271,7 @@ impl CommandEditor {
                         entry.action = Action::Hyprland {
                             dispatcher: String::new(),
                             args: String::new(),
-                            focus_original: false,
+                            focus_original: true,
                         };
                         self.dirty = true;
                     }

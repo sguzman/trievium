@@ -102,3 +102,23 @@ command-editor CRUD verification as defined in
 [docs/COMMANDS.md](docs/COMMANDS.md). None of those desktop checks can
 be claimed complete from headless Sway CI. No main merge or release
 has been performed.
+
+
+**Round 4 checkpoint: 35% verified** (previous 35%; **+0 percentage
+points**). Recovered the interrupted iteration, verified the
+argv editor cache and first-run relative configuration behavior,
+and reduced group-prefix validation from a per-group full-command
+scan to an ordered prefix lookup. Added regression coverage for
+groups that do not contain commands and groups that overlap terminals.
+[Green CI run 40953760893](https://github.com/sguzman/trievium/actions/runs/40953760893)
+checks the code through `7cad5645`. Subsequent commits add the
+HUD singleton first-run race test, bounded Hyprland focus-state
+propagation, and corrected documented workspace selector quoting;
+their newer CI runs are tracked separately and must pass before
+release. No new milestones were introduced.
+
+**Next gate remains real owner-session Hyprland QA**:
+reversible fullscreen on the original window, global workspace
+switching, native command-editor CRUD and visual behavior, and
+copy-picker regression. See [docs/COMMANDS.md](docs/COMMANDS.md).
+Do not mark C3–C5 verified, merge, or release until that evidence exists.

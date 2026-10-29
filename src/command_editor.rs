@@ -244,17 +244,22 @@ impl CommandEditor {
         egui::ScrollArea::vertical()
             .id_salt("command-library")
             .max_height(140.0)
-            .show(ui, |ui| {
-                for (index, entry) in self.config.commands.iter().enumerate() {
-                    if ui
-                        .selectable_label(
-                            self.selected == Some(index),
-                            format!("{}  ·  {}", entry.sequence, entry.label),
-                        )
-                        .clicked()
-                    {
-                        self.selected = Some(index);
-                    }
+            .show_rows(ui, 30.0, self.config.commands.len(), |ui, rows| {
+                ui.spacing_mut().item_spacing.y = 0.0;
+                for index in rows {
+                    let entry = &self.config.commands[index];
+                    ui.horizontal(|ui| {
+                        ui.set_min_height(30.0);
+                        if ui
+                            .selectable_label(
+                                self.selected == Some(index),
+                                format!("{}  ·  {}", entry.sequence, entry.label),
+                            )
+                            .clicked()
+                        {
+                            self.selected = Some(index);
+                        }
+                    });
                 }
             });
         if let Some(index) = self.selected
@@ -336,9 +341,12 @@ impl CommandEditor {
         egui::ScrollArea::vertical()
             .id_salt("command-groups")
             .max_height(160.0)
-            .show(ui, |ui| {
-                for (index, group) in self.config.groups.iter_mut().enumerate() {
+            .show_rows(ui, 34.0, self.config.groups.len(), |ui, rows| {
+                ui.spacing_mut().item_spacing.y = 0.0;
+                for index in rows {
+                    let group = &mut self.config.groups[index];
                     ui.horizontal(|ui| {
+                        ui.set_min_height(34.0);
                         ui.label("Prefix");
                         self.dirty |= ui
                             .add(egui::TextEdit::singleline(&mut group.prefix).desired_width(75.0))

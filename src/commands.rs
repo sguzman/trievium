@@ -474,12 +474,14 @@ pub fn run(args: &[String]) -> Result<()> {
         initialize_empty(&path)?;
     }
     let config = CommandConfig::load(&path)?;
+    // Compilation happens before the GUI event loop, never on its render thread.
+    let command_index = CommandIndex::compile(&config);
     let original_window = hyprland::focused_window_before_popup();
     let editing = operation == "edit";
     let height = if editing {
         680.0
     } else {
-        (118.0 + ROW_HEIGHT * config.choices("").len().min(8) as f32).clamp(185.0, 460.0)
+        (118.0 + ROW_HEIGHT * command_index.choices("").len().min(8) as f32).clamp(185.0, 460.0)
     };
     let width = if editing { 900.0 } else { 560.0 };
     let native = eframe::NativeOptions {
@@ -507,14 +509,16 @@ pub fn run(args: &[String]) -> Result<()> {
     hyprland::prepare_floating_popup().map_err(anyhow::Error::msg)?;
     let focus_state =
         hyprland::focus_new_command_popup(width.round() as i32, height.round() as i32);
-    let visible_choices = config.choices("");
+    let visible_choices = command_index.choices("").to_vec();
     let app = CommandPicker {
         config,
+        command_index,
         visible_prefix: String::new(),
         visible_choices,
         config_path: path,
         editor,
         pending_editor: None,
+        pending_compilation: None,
         original_window,
         focus_state,
         typed: String::new(),
@@ -536,9 +540,11 @@ pub fn run(args: &[String]) -> Result<()> {
 }
 
 type PendingEditor = Arc<Mutex<Option<Result<CommandEditor>>>>;
+type PendingCompilation = Arc<Mutex<Option<(CommandConfig, CommandIndex)>>>;
 
 struct CommandPicker {
     config: CommandConfig,
+    command_index: CommandIndex,
     // Only regenerate visible entries when the prefix or registry changes,
     // never on egui's every-frame paint path.
     visible_prefix: String,
@@ -546,6 +552,7 @@ struct CommandPicker {
     config_path: PathBuf,
     editor: Option<CommandEditor>,
     pending_editor: Option<PendingEditor>,
+    pending_compilation: Option<PendingCompilation>,
     original_window: Option<String>,
     focus_state: hyprland::CommandPopupFocus,
     typed: String,
@@ -559,7 +566,7 @@ impl CommandPicker {
     fn refresh_choices(&mut self) {
         let prefix = self.typed.to_ascii_uppercase();
         if self.visible_prefix != prefix {
-            self.visible_choices = self.config.choices(&prefix);
+            self.visible_choices = self.command_index.choices(&prefix).to_vec();
             self.visible_prefix = prefix;
         }
     }
@@ -619,7 +626,7 @@ impl CommandPicker {
     }
 
     fn accept(&mut self) {
-        match self.config.resolve(&self.typed) {
+        match self.command_index.resolve(&self.typed) {
             Resolution::Selected(index) => self.choose(index),
             Resolution::Continue(prefix) => {
                 self.typed = prefix.to_ascii_lowercase();
@@ -632,6 +639,24 @@ impl CommandPicker {
 
 impl eframe::App for CommandPicker {
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        if let Some(pending) = &self.pending_compilation {
+            let compiled = pending.lock().ok().and_then(|mut state| state.take());
+            if let Some((config, index)) = compiled {
+                self.pending_compilation = None;
+                self.config = config;
+                self.command_index = index;
+                self.typed.clear();
+                self.visible_prefix = String::from("stale");
+                self.refresh_choices();
+                self.error = None;
+                let height = (118.0
+                    + ROW_HEIGHT * self.command_index.choices("").len().min(8) as f32)
+                    .clamp(185.0, 460.0);
+                Self::resize(ctx, 560, height.round() as i32);
+            } else {
+                ctx.request_repaint_after(Duration::from_millis(20));
+            }
+        }
         if let Some(pending) = &self.pending_editor {
             let loaded = pending.lock().ok().and_then(|mut state| state.take());
             if let Some(result) = loaded {
@@ -697,20 +722,29 @@ impl eframe::App for CommandPicker {
             ui.label("Opening command editor…");
             return;
         }
+        if self.pending_compilation.is_some() {
+            ui.label("Preparing command tree…");
+            return;
+        }
         if let Some(editor) = self.editor.as_mut() {
             match editor.ui(ui) {
                 EditorEvent::Stay => {}
                 EditorEvent::Exit => std::process::exit(0),
                 EditorEvent::Done => {
                     let editor = self.editor.take().unwrap();
-                    self.config = editor.config;
-                    self.typed.clear();
-                    self.visible_prefix = String::from("stale");
-                    self.refresh_choices();
-                    self.error = None;
-                    let height = (118.0 + ROW_HEIGHT * self.config.choices("").len().min(8) as f32)
-                        .clamp(185.0, 460.0);
-                    Self::resize(ui.ctx(), 560, height.round() as i32);
+                    // Reindex the edited registry on a worker before exposing
+                    // the picker. Do not scan thousands of sequences on egui.
+                    let config = editor.config;
+                    let result: PendingCompilation = Arc::new(Mutex::new(None));
+                    let sender = Arc::clone(&result);
+                    self.pending_compilation = Some(result);
+                    std::thread::spawn(move || {
+                        let index = CommandIndex::compile(&config);
+                        if let Ok(mut slot) = sender.lock() {
+                            *slot = Some((config, index));
+                        }
+                    });
+                    ui.ctx().request_repaint_after(Duration::from_millis(20));
                 }
             }
             return;

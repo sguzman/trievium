@@ -599,8 +599,7 @@ mod tests {
         };
         click(&mut editor, 190.0, &ctx, &mut timestamp);
         assert_eq!(
-            editor.config.commands[0].sequence,
-            "w f",
+            editor.config.commands[0].sequence, "w f",
             "native Up did not move the selected command"
         );
         assert_eq!(editor.selected, Some(0));
@@ -614,12 +613,14 @@ mod tests {
         }
         assert!(!editor.busy());
         assert!(!editor.dirty);
-        assert_eq!(CommandConfig::load(&path).unwrap().commands[0].sequence, "w f");
+        assert_eq!(
+            CommandConfig::load(&path).unwrap().commands[0].sequence,
+            "w f"
+        );
 
         click(&mut editor, 240.0, &ctx, &mut timestamp);
         assert_eq!(
-            editor.config.commands[1].sequence,
-            "w f",
+            editor.config.commands[1].sequence, "w f",
             "native Down did not move the selected command"
         );
         assert_eq!(editor.selected, Some(1));

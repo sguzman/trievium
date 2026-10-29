@@ -63,7 +63,14 @@ Example `commands.json`:
 }
 ```
 
-Bind `Super+Space` in Hyprland to the installed executable:
+Bind `Super+Space` in Hyprland to the installed executable.
+For Hyprland 0.55+ Lua configuration:
+
+```lua
+hl.bind("SUPER + SPACE", hl.dsp.exec_cmd("trievium commands"))
+```
+
+For a legacy `hyprland.conf` configuration:
 
 ```ini
 bind = SUPER, SPACE, exec, trievium commands

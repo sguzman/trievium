@@ -125,7 +125,9 @@ impl CommandConfig {
                 Action::Hyprland { expression, .. } => {
                     if !expression.starts_with("hl.dsp.")
                         || expression.len() > 4096
-                        || expression.chars().any(|ch| matches!(ch, '\n' | '\r' | '\0'))
+                        || expression
+                            .chars()
+                            .any(|ch| matches!(ch, '\n' | '\r' | '\0'))
                     {
                         bail!("Invalid Hyprland Lua dispatcher expression for {key}");
                     }

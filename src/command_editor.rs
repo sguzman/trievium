@@ -278,10 +278,14 @@ impl CommandEditor {
                         self.error = None;
                         self.dirty = false;
                         self.confirm_exit = false;
+                        self.done_ready = self.finish_after_reload;
+                    }
+                    Err(error) => {
+                        self.error = Some(format!("{error:#}"));
                         self.done_ready = false;
                     }
-                    Err(error) => self.error = Some(format!("{error:#}")),
                 }
+                self.finish_after_reload = false;
             } else {
                 ctx.request_repaint_after(Duration::from_millis(20));
             }

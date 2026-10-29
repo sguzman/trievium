@@ -45,9 +45,9 @@ of acceptance criteria contributes to completion.
 | --- | --- | --- | --- |
 | 🧱 C1 · 15% | `trievium commands` CLI independent of original picker, session locking and no copy config reads/writes; copy CLI remains compatible | Existing copy app | ✅ Verified — full green CI, copy keyboard E2E and command CLI smoke |
 | 🗂️ C2 · 20% | Versioned separate `commands.json`; invalid and conflicting sequences rejected; safe initialization and round-trip/unit tests | C1 | ✅ Verified — configuration, collision, atomic persistence and no-copy-mutation tests |
-| ⌨️ C3 · 30% | Live native HUD, nested exact sequences, actionable commands, Escape/Backspace/click, Hyprland original-focus safety, nonblocking execution; automated and Hyprland QA | C2 | Active — implemented, CI + desktop QA pending |
-| 🛠️ C4 · 20% | Native editor for groups and command CRUD/reorder, atomic writes with external-edit conflict detection, validation, usable picker/editor transition | C2–C3 | Active — code committed, CI + UI QA pending |
-| 🧪 C5 · 15% | Regression tests for original copy mode, CI, documentation, actual Hyprland dogfooding, packaging and release readiness | C1–C4 | Pending |
+| ⌨️ C3 · 30% | Live native HUD, nested exact sequences, actionable commands, Escape/Backspace/click, Hyprland original-focus safety, nonblocking execution; automated and Hyprland QA | C2 | Active — 71 Rust tests and Sway command-tree E2E green; actual Hyprland original-focus/float QA pending |
+| 🛠️ C4 · 20% | Native editor for groups and command CRUD/reorder, atomic writes with external-edit conflict detection, validation, usable picker/editor transition | C2–C3 | Active — atomic-save tests, first-run Sway editor launch and regression checks green; manual editor CRUD/visual QA pending |
+| 🧪 C5 · 15% | Regression tests for original copy mode, CI, documentation, actual Hyprland dogfooding, packaging and release readiness | C1–C4 | Active — build, packaging and regressions green; real-session QA and release decisions remain |
 
 **Initial baseline: 0% verified** for this new scope. Committed but untested
 work remains active, not complete. Do not combine this new-scope percentage with
@@ -62,3 +62,20 @@ checksum. C3 and C4 remain active because modern Lua dispatch and native
 command-editor QA require the newer branch checks and real Hyprland session
 verification. C5 remains pending release readiness. No main-branch merge or
 release has been performed.
+
+
+**Round 2 checkpoint: 35% verified** (previous 35%; **+0 percentage
+points**). The additional work removes UI-thread editor loads, saves and
+Discard reads; virtualizes long editor lists; caches HUD choices; and adds
+three-level navigation, Backspace, invalid-key and first-run editor tests.
+[Green CI run 40944215754](https://github.com/sguzman/trievium/actions/runs/40944215754)
+confirmed **71 Rust tests**, strict Clippy, nested command keyboard E2E,
+clipboard isolation, first-run editor initialization, and packaging.
+These checks improve coverage of C3–C5 but do not satisfy the outstanding
+**real Hyprland** and interactive editor acceptance criteria, so their
+weights remain unearned. The follow-on non-reclaiming command-popup
+focus policy is also awaiting its own CI run and local Hyprland QA.
+
+Next: confirm the branch HEAD CI, then run the bounded manual checklist
+in [docs/COMMANDS.md](docs/COMMANDS.md) inside the owner's actual Hyprland
+session. Do not merge or publish before those checks pass.

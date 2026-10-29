@@ -233,6 +233,53 @@ pub fn resize_own_popup(width: i32, height: i32) {
     });
 }
 
+/// Capture the original focused window before the command HUD takes focus.
+pub fn focused_window_before_popup() -> Option<String> {
+    if std::env::var_os("HYPRLAND_INSTANCE_SIGNATURE").is_none_or(|s| s.is_empty()) {
+        return None;
+    }
+    let output = Command::new("hyprctl")
+        .args(["-j", "activewindow"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    active_window_address(&output.stdout)
+}
+
+/// Refocus only the window captured before the popup was mapped. Do not
+/// blindly dispatch focus-sensitive actions to the command HUD or whichever
+/// other window happened to become active.
+pub fn restore_original_focus(address: &str) -> Result<(), String> {
+    if !valid_address(address) {
+        return Err("Invalid original window address".into());
+    }
+    let output = Command::new("hyprctl")
+        .args(["-j", "clients"])
+        .output()
+        .map_err(|error| format!("Checking original window: {error}"))?;
+    if !output.status.success() {
+        return Err("Unable to verify original Hyprland window".into());
+    }
+    let clients: Vec<Value> = serde_json::from_slice(&output.stdout)
+        .map_err(|error| format!("Parsing Hyprland clients: {error}"))?;
+    if !clients.iter().any(|client| {
+        client.get("address").and_then(Value::as_str) == Some(address)
+            && client.get("mapped").and_then(Value::as_bool) == Some(true)
+            && client.get("class").and_then(Value::as_str) != Some(APP_CLASS)
+    }) {
+        return Err("The original window is no longer mapped".into());
+    }
+    dispatch_lua(&format!(
+        "hl.dsp.focus({{ window = \"address:{address}\" }})"
+    ))?;
+    if !is_active_window(address) {
+        return Err("Refusing to dispatch: original window did not receive focus".into());
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

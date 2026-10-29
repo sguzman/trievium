@@ -692,6 +692,37 @@ mod tests {
     }
 
     #[test]
+    fn nested_three_key_command_never_executes_at_an_ancestor() {
+        let config = CommandConfig {
+            version: 1,
+            groups: vec![
+                Group {
+                    prefix: "w".into(),
+                    label: "Windows".into(),
+                },
+                Group {
+                    prefix: "w a".into(),
+                    label: "Advanced".into(),
+                },
+            ],
+            commands: vec![CommandEntry {
+                sequence: "w a t".into(),
+                label: "Deep action".into(),
+                action: Action::Exec {
+                    program: "true".into(),
+                    args: Vec::new(),
+                },
+            }],
+        };
+        config.validate().unwrap();
+        assert_eq!(config.resolve("w"), Resolution::Continue("W".into()));
+        assert_eq!(config.resolve("wa"), Resolution::Continue("WA".into()));
+        assert_eq!(config.resolve("wat"), Resolution::Selected(0));
+        assert_eq!(config.choices("W")[0].label, "Advanced");
+        assert_eq!(config.choices("WA")[0].label, "Deep action");
+    }
+
+    #[test]
     fn groups_and_commands_are_separate_in_the_hud() {
         let config = demo();
         let root = config.choices("");

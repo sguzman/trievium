@@ -41,6 +41,7 @@ pub struct CommandEditor {
     pending: Option<PendingSave>,
     pending_reload: Option<PendingReload>,
     finish_after_save: bool,
+    finish_after_reload: bool,
     done_ready: bool,
     confirm_exit: bool,
 }
@@ -174,6 +175,7 @@ impl CommandEditor {
             pending: None,
             pending_reload: None,
             finish_after_save: false,
+            finish_after_reload: false,
             done_ready: false,
             confirm_exit: false,
         })
@@ -187,7 +189,11 @@ impl CommandEditor {
         // the save worker, never on the egui/UI thread.
         if !self.dirty {
             if finish {
-                self.done_ready = true;
+                // The registry may have changed in another process while the
+                // editor was open. Never return a stale in-memory snapshot to
+                // the executable picker; reload and validate off the UI thread.
+                self.begin_reload();
+                self.finish_after_reload = true;
             }
             return;
         }
@@ -244,6 +250,7 @@ impl CommandEditor {
             return;
         }
         self.confirm_exit = false;
+        self.finish_after_reload = false;
         let result: PendingReload = Arc::new(Mutex::new(None));
         let sender = Arc::clone(&result);
         let path = self.path.clone();

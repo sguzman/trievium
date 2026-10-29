@@ -62,7 +62,10 @@ impl CommandPopupFocus {
     }
 
     pub fn run_action<T>(&self, action: impl FnOnce() -> T) -> T {
-        let _guard = self.gate.lock().unwrap_or_else(|poison| poison.into_inner());
+        let _guard = self
+            .gate
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
         action()
     }
 
@@ -70,9 +73,7 @@ impl CommandPopupFocus {
         self.run_action(|| {
             if std::env::var_os("HYPRLAND_INSTANCE_SIGNATURE").is_some_and(|s| !s.is_empty()) {
                 if let Some(address) = our_floating_window_address(std::process::id()) {
-                    let expression = format!(
-                        "hl.dsp.focus({{ window = \"address:{address}\" }})"
-                    );
+                    let expression = format!("hl.dsp.focus({{ window = \"address:{address}\" }})");
                     if let Err(error) = dispatch_lua(&expression) {
                         eprintln!("trievium: could not restore command HUD focus: {error}");
                     }

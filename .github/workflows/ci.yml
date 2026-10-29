@@ -17,7 +17,7 @@ jobs:
         with:
           components: rustfmt, clippy
       - name: Linux dependencies
-        run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libwayland-dev libegl-dev libgl-dev libxcb-shape0-dev libxcb-xfixes0-dev libxcb-render0-dev pkg-config lua5.4 sway wtype wlrctl wl-clipboard libgl1-mesa-dri
+        run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libwayland-dev libegl-dev libgl-dev libxcb-shape0-dev libxcb-xfixes0-dev libxcb-render0-dev pkg-config lua5.4 sway wtype wl-clipboard libgl1-mesa-dri
       - name: Format
         run: cargo fmt --all -- --check
       - name: Validate locked dependency graph

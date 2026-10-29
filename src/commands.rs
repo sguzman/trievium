@@ -326,6 +326,7 @@ pub enum Resolution {
     Selected(usize),
 }
 
+#[derive(Clone)]
 struct Choice {
     key: char,
     label: String,
@@ -886,6 +887,56 @@ mod tests {
         assert_eq!(config.resolve("wxc"), Resolution::Selected(1));
         assert_eq!(config.resolve("a"), Resolution::Continue("A".into()));
         assert_eq!(config.resolve("at"), Resolution::Selected(2));
+    }
+
+    #[test]
+    fn compiled_prefix_index_matches_reference_reducer_and_branch_labels() {
+        let config = demo();
+        config.validate().unwrap();
+        let index = CommandIndex::compile(&config);
+        for typed in ["", "w", "wf", "W C", "wxc", "a", "at", "zawf", "a!", "wxz"] {
+            assert_eq!(
+                index.resolve(typed),
+                config.resolve(typed),
+                "typed {typed:?}"
+            );
+        }
+        for prefix in ["", "W", "A", "WF", "Z"] {
+            let indexed = index.choices(prefix);
+            let reference = config.choices(prefix);
+            assert_eq!(indexed.len(), reference.len(), "prefix {prefix:?}");
+            for (got, want) in indexed.iter().zip(&reference) {
+                assert_eq!(got.key, want.key);
+                assert_eq!(got.label, want.label);
+                assert_eq!(got.terminal, want.terminal);
+            }
+        }
+    }
+
+    #[test]
+    fn index_keeps_deep_commands_exact_when_they_are_only_candidate() {
+        let config = CommandConfig {
+            version: 1,
+            groups: vec![Group {
+                prefix: "w a".into(),
+                label: "Advanced".into(),
+            }],
+            commands: vec![CommandEntry {
+                sequence: "w a t".into(),
+                label: "Deep terminal".into(),
+                action: Action::Exec {
+                    program: "true".into(),
+                    args: Vec::new(),
+                },
+            }],
+        };
+        config.validate().unwrap();
+        let index = CommandIndex::compile(&config);
+        assert_eq!(index.resolve("w"), Resolution::Continue("W".into()));
+        assert_eq!(index.resolve("wa"), Resolution::Continue("WA".into()));
+        assert_eq!(index.resolve("wat"), Resolution::Selected(0));
+        assert_eq!(index.choices("W")[0].label, "Advanced");
+        assert_eq!(index.choices("WA")[0].label, "Deep terminal");
     }
 
     #[test]

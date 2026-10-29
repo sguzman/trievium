@@ -537,6 +537,35 @@ mod tests {
     use super::*;
 
     #[test]
+    fn done_button_layout_matches_headless_wayland_pointer_target() {
+        // Headless Wayland uses a 1280x720 tiled output with no decorations.
+        // Verify the coordinate chosen for the synthetic pointer clicks is
+        // actually inside egui's Done button at the default scale.
+        let ctx = egui::Context::default();
+        let mut done_rect = egui::Rect::NOTHING;
+        let input = egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                egui::vec2(1280.0, 720.0),
+            )),
+            ..Default::default()
+        };
+        ctx.run_ui(input, |ui| {
+            ui.horizontal(|ui| {
+                ui.heading("Edit command tree");
+                ui.separator();
+                ui.button("Save");
+                done_rect = ui.button("Done").rect;
+            });
+        })
+        .drop_without_applying_deltas();
+        assert!(
+            done_rect.contains(egui::pos2(300.0, 22.0)),
+            "Sway click at (300,22) missed the Done control: {done_rect:?}"
+        );
+    }
+
+    #[test]
     fn argv_editor_cache_only_rebuilds_when_selection_changes() {
         let dir =
             std::env::temp_dir().join(format!("trievium-command-argv-test-{}", std::process::id()));

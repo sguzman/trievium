@@ -734,6 +734,19 @@ mod tests {
     }
 
     #[test]
+    fn bare_relative_command_registry_uses_current_directory() {
+        assert_eq!(config_parent(Path::new("commands.json")), Path::new("."));
+        assert_eq!(
+            config_parent(Path::new("config/trievium/commands.json")),
+            Path::new("config/trievium")
+        );
+        assert_eq!(
+            config_parent(Path::new("/tmp/trievium/commands.json")),
+            Path::new("/tmp/trievium")
+        );
+    }
+
+    #[test]
     fn exact_sequence_required_even_with_single_candidate() {
         let config = demo();
         config.validate().unwrap();

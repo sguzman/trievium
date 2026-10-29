@@ -537,6 +537,73 @@ mod tests {
     use super::*;
 
     #[test]
+    fn native_done_button_click_returns_editor_to_picker_without_disk_mutation() {
+        let dir = std::env::temp_dir().join(format!(
+            "trievium-command-done-ui-test-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("commands.json");
+        crate::commands::initialize_empty(&path).unwrap();
+        let before = fs::read(&path).unwrap();
+        let mut editor = CommandEditor::new(path.clone()).unwrap();
+        let ctx = egui::Context::default();
+        let screen_rect =
+            egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1280.0, 720.0));
+        let target = egui::pos2(250.0, 15.0);
+        let run = |editor: &mut CommandEditor, events: Vec<egui::Event>, time: f64| {
+            let mut action = EditorEvent::Stay;
+            ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(screen_rect),
+                    time: Some(time),
+                    events,
+                    ..Default::default()
+                },
+                |ui| action = editor.ui(ui),
+            )
+            .drop_without_applying_deltas();
+            action
+        };
+        let pointer = |pressed| egui::Event::PointerButton {
+            pos: target,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        };
+        assert!(matches!(run(&mut editor, Vec::new(), 0.0), EditorEvent::Stay));
+        assert!(matches!(
+            run(
+                &mut editor,
+                vec![egui::Event::PointerMoved(target), pointer(true)],
+                0.1
+            ),
+            EditorEvent::Stay
+        ));
+        assert!(matches!(
+            run(&mut editor, vec![pointer(false)], 0.2),
+            EditorEvent::Stay
+        ));
+
+        // The click starts a real fresh-snapshot reload on a worker.
+        assert!(editor.busy() || editor.done_ready);
+        for step in 0..250 {
+            if matches!(
+                run(&mut editor, Vec::new(), 0.3 + f64::from(step) * 0.02),
+                EditorEvent::Done
+            ) {
+                assert!(!editor.busy());
+                assert_eq!(fs::read(&path).unwrap(), before);
+                fs::remove_dir_all(dir).unwrap();
+                return;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        panic!("egui Done click did not complete the editor-to-picker transition");
+    }
+
+    #[test]
     fn argv_editor_cache_only_rebuilds_when_selection_changes() {
         let dir =
             std::env::temp_dir().join(format!("trievium-command-argv-test-{}", std::process::id()));

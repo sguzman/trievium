@@ -254,10 +254,18 @@ pub fn config_path(override_path: Option<PathBuf>) -> Result<PathBuf> {
     Ok(PathBuf::from(home).join(".config/trievium/commands.json"))
 }
 
+/// A bare relative filename has an empty parent (`""`), which is not a
+/// directory that can be created. Treat it as the current directory.
+fn config_parent(path: &Path) -> &Path {
+    path.parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."))
+}
+
 /// Never overwrite an existing command registry, particularly on a second
 /// invocation. The item library is neither discovered nor opened.
 pub fn initialize_empty(path: &Path) -> Result<()> {
-    let parent = path.parent().context("Command path has no parent")?;
+    let parent = config_parent(path);
     fs::create_dir_all(parent).with_context(|| format!("Creating {}", parent.display()))?;
     let mut options = fs::OpenOptions::new();
     options.create_new(true).write(true);

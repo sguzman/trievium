@@ -364,7 +364,10 @@ pub fn restore_original_focus(address: &str) -> Result<(), String> {
         return Err("Unable to verify original Hyprland window".into());
     }
     if !original_window_is_safe(&output.stdout, address) {
-        return Err("The original window is no longer mapped or is not a trusted non-Trievium client".into());
+        return Err(
+            "The original window is no longer mapped or is not a trusted non-Trievium client"
+                .into(),
+        );
     }
     dispatch_lua(&format!(
         "hl.dsp.focus({{ window = \"address:{address}\" }})"

@@ -365,7 +365,9 @@ pub fn run(args: &[String]) -> Result<()> {
     };
     let original_window = hyprland::focused_window_before_popup();
     let editing = operation == "edit";
-    let height = if editing { 680.0 } else {
+    let height = if editing {
+        680.0
+    } else {
         (118.0 + ROW_HEIGHT * config.choices("").len().min(8) as f32).clamp(185.0, 460.0)
     };
     let width = if editing { 900.0 } else { 560.0 };

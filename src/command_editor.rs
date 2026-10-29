@@ -84,8 +84,8 @@ fn write_atomic(path: &Path, config: &CommandConfig, expected: &[u8]) -> Result<
 }
 
 fn read_snapshot(path: &Path) -> Result<(Vec<u8>, CommandConfig)> {
-    let bytes = fs::read(path)
-        .with_context(|| format!("Reading command registry {}", path.display()))?;
+    let bytes =
+        fs::read(path).with_context(|| format!("Reading command registry {}", path.display()))?;
     let config: CommandConfig = serde_json::from_slice(&bytes)
         .with_context(|| format!("Parsing command registry {}", path.display()))?;
     config.validate()?;

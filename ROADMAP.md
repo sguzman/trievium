@@ -50,6 +50,7 @@ The original copy HUD and `items.json` must remain independent from
 
 ### Verified checkpoint and dependencies
 
+- [Latest green CI `4c12e689`](https://github.com/sguzman/trievium/actions/runs/40972989550): **91 Rust tests, zero failures**, strict Clippy, CLI smoke, both Wayland HUD regressions, optimized release build, and checksum-verified package. The added group-order persistence test passed. This does not replace real-session Hyprland QA.
 - [Green CI `add402eb`](https://github.com/sguzman/trievium/actions/runs/40970574576):
   **90 Rust tests**, strict Clippy, original copy/command HUD Wayland E2E,
   editor first-run, optimized release build and package checksum. Native egui
@@ -77,7 +78,7 @@ The original copy HUD and `items.json` must remain independent from
 - **Group editor follow-up (2026-10-29):** the editor now exposes Up/Down
   controls for group rows, in addition to command rows. The new bounded-move
   and save/reload regression checks serialized group order and preservation
-  of the existing copy library. Implementation commit [`4c12e689`](https://github.com/sguzman/trievium/commit/4c12e689ca6692214ea7542a2e7f85255976dccb); [CI run](https://github.com/sguzman/trievium/actions/runs/40972989550) has passed formatting, Rust tests, Clippy, CLI smoke and headless Wayland checks; packaging remains to be confirmed. Group row order does not change shortcut-key sorting in the HUD.
+  of the existing copy library. Implementation commit [`4c12e689`](https://github.com/sguzman/trievium/commit/4c12e689ca6692214ea7542a2e7f85255976dccb); [CI run](https://github.com/sguzman/trievium/actions/runs/40972989550) passed all stages, including optimized release build and checksum packaging. Group row order does not change shortcut-key sorting in the HUD.
 - **Local blocker:** use the bounded [real Hyprland QA checklist](docs/COMMANDS.md)
   for reversible fullscreen on the original window, workspace switching,
   interactive command/editor CRUD, and the accepted copy picker. Headless

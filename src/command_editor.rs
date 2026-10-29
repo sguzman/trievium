@@ -15,7 +15,7 @@ pub enum EditorEvent {
 }
 
 type PendingSave = Arc<Mutex<Option<Result<Vec<u8>>>>>;
-type PendingReload = Arc<Mutex<Option<Result<(Vec<u8>, CommandConfig)>>>>;
+type PendingReload = Arc<Mutex<Option<Result<(PathBuf, Vec<u8>, CommandConfig)>>>>;
 
 pub struct CommandEditor {
     path: PathBuf,
@@ -96,20 +96,23 @@ fn write_atomic(
     Ok(next)
 }
 
-fn read_snapshot(path: &Path) -> Result<(Vec<u8>, CommandConfig)> {
+fn read_snapshot(path: &Path) -> Result<(PathBuf, Vec<u8>, CommandConfig)> {
+    let target = fs::canonicalize(path)
+        .with_context(|| format!("Resolving command registry {}", path.display()))?;
     let bytes =
         fs::read(path).with_context(|| format!("Reading command registry {}", path.display()))?;
     let config: CommandConfig = serde_json::from_slice(&bytes)
         .with_context(|| format!("Parsing command registry {}", path.display()))?;
     config.validate()?;
-    Ok((bytes, config))
+    if fs::canonicalize(path)? != target {
+        bail!("Command registry link changed during load; reopen and retry.");
+    }
+    Ok((target, bytes, config))
 }
 
 impl CommandEditor {
     pub fn new(path: PathBuf) -> Result<Self> {
-        let target = fs::canonicalize(&path)
-            .with_context(|| format!("Resolving command registry {}", path.display()))?;
-        let (original, config) = read_snapshot(&path)?;
+        let (target, original, config) = read_snapshot(&path)?;
         Ok(Self {
             path,
             target,
@@ -197,13 +200,10 @@ impl CommandEditor {
             if let Some(result) = finished {
                 self.pending_reload = None;
                 match result {
-                    Ok((bytes, config)) => {
+                    Ok((target, bytes, config)) => {
                         self.original = bytes;
                         self.config = config;
-                        // Discard is a fresh snapshot: subsequent saves use
-                        // the current target of the user's config-store link.
-                        self.target = fs::canonicalize(&self.path)
-                            .unwrap_or_else(|_| self.target.clone());
+                        self.target = target;
                         self.selected = None;
                         self.error = None;
                         self.dirty = false;

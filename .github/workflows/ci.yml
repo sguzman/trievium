@@ -31,6 +31,17 @@ jobs:
           cargo build --locked
           config="$RUNNER_TEMP/trievium-ci-items.json"
           ./target/debug/trievium --version
+
+          # Command registry must be independent from the existing copy library.
+          commands="$RUNNER_TEMP/trievium-ci-commands.json"
+          ./target/debug/trievium commands init --config "$commands"
+          ./target/debug/trievium commands validate --config "$commands"
+          ./target/debug/trievium commands config-path --config "$commands" | grep -Fx "$commands"
+          if ./target/debug/trievium commands init --config "$commands"; then
+            echo "command init unexpectedly overwrote the registry" >&2
+            exit 1
+          fi
+          test -f "$config"
           ./target/debug/trievium init --config "$config"
           ./target/debug/trievium validate --config "$config"
           ./target/debug/trievium validate --config "$config" --theme light

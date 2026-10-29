@@ -549,8 +549,7 @@ mod tests {
         let before = fs::read(&path).unwrap();
         let mut editor = CommandEditor::new(path.clone()).unwrap();
         let ctx = egui::Context::default();
-        let screen_rect =
-            egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1280.0, 720.0));
+        let screen_rect = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1280.0, 720.0));
         let target = egui::pos2(250.0, 15.0);
         let run = |editor: &mut CommandEditor, events: Vec<egui::Event>, time: f64| {
             let mut action = EditorEvent::Stay;
@@ -572,7 +571,10 @@ mod tests {
             pressed,
             modifiers: egui::Modifiers::NONE,
         };
-        assert!(matches!(run(&mut editor, Vec::new(), 0.0), EditorEvent::Stay));
+        assert!(matches!(
+            run(&mut editor, Vec::new(), 0.0),
+            EditorEvent::Stay
+        ));
         assert!(matches!(
             run(
                 &mut editor,

@@ -387,7 +387,7 @@ pub fn run(args: &[String]) -> Result<()> {
     hyprland::prepare_floating_popup().map_err(anyhow::Error::msg)?;
     hyprland::focus_new_popup(width.round() as i32, height.round() as i32);
     let editor = if editing {
-        Some(CommandEditor::new(path.clone(), config.clone())?)
+        Some(CommandEditor::new(path.clone())?)
     } else {
         None
     };
@@ -439,7 +439,7 @@ impl CommandPicker {
     }
 
     fn open_editor(&mut self, ctx: &egui::Context) {
-        match CommandEditor::new(self.config_path.clone(), self.config.clone()) {
+        match CommandEditor::new(self.config_path.clone()) {
             Ok(editor) => {
                 self.editor = Some(editor);
                 self.typed.clear();

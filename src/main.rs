@@ -54,7 +54,7 @@ fn run() -> Result<()> {
             }
             "--help" | "-h" => {
                 println!(
-                    "Trievium - keyboard-first text selection and command trees\n\nUsage: trievium [pick|manage|init|validate|config-path|doctor] [--config PATH] [--theme system|light|dark] [--diagnose-input]\n       trievium commands [pick|init|validate|config-path] [--config PATH] [--theme system|light|dark]\n\nDefault: copy picker. The command HUD uses its own commands.json file."
+                    "Trievium - keyboard-first text selection and command trees\n\nUsage: trievium [pick|manage|init|validate|config-path|doctor] [--config PATH] [--theme system|light|dark] [--diagnose-input]\n       trievium commands [pick|edit|init|validate|config-path] [--config PATH] [--theme system|light|dark]\n\nDefault: copy picker. The command HUD uses its own commands.json file."
                 );
                 return Ok(());
             }

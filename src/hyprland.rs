@@ -329,6 +329,26 @@ pub fn focused_window_before_popup() -> Option<String> {
     active_window_address(&output.stdout)
 }
 
+/// A focus-dependent action must never target the command HUD or a client
+/// with incomplete/malformed identity. Verify an actual mapped non-Trievium
+/// client address before even attempting the focus dispatcher.
+fn original_window_is_safe(clients_json: &[u8], address: &str) -> bool {
+    if !valid_address(address) {
+        return false;
+    }
+    let Ok(clients) = serde_json::from_slice::<Vec<Value>>(clients_json) else {
+        return false;
+    };
+    clients.iter().any(|client| {
+        client.get("address").and_then(Value::as_str) == Some(address)
+            && client.get("mapped").and_then(Value::as_bool) == Some(true)
+            && client
+                .get("class")
+                .and_then(Value::as_str)
+                .is_some_and(|class| !class.is_empty() && class != APP_CLASS)
+    })
+}
+
 /// Refocus only the window captured before the popup was mapped. Do not
 /// blindly dispatch focus-sensitive actions to the command HUD or whichever
 /// other window happened to become active.
@@ -343,14 +363,8 @@ pub fn restore_original_focus(address: &str) -> Result<(), String> {
     if !output.status.success() {
         return Err("Unable to verify original Hyprland window".into());
     }
-    let clients: Vec<Value> = serde_json::from_slice(&output.stdout)
-        .map_err(|error| format!("Parsing Hyprland clients: {error}"))?;
-    if !clients.iter().any(|client| {
-        client.get("address").and_then(Value::as_str) == Some(address)
-            && client.get("mapped").and_then(Value::as_bool) == Some(true)
-            && client.get("class").and_then(Value::as_str) != Some(APP_CLASS)
-    }) {
-        return Err("The original window is no longer mapped".into());
+    if !original_window_is_safe(&output.stdout, address) {
+        return Err("The original window is no longer mapped or is not a trusted non-Trievium client".into());
     }
     dispatch_lua(&format!(
         "hl.dsp.focus({{ window = \"address:{address}\" }})"

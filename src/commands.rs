@@ -119,7 +119,7 @@ impl CommandConfig {
                 } => {
                     if dispatcher.is_empty()
                         || !dispatcher.bytes().all(|ch| ch.is_ascii_alphanumeric() || ch == b'_')
-                        || args.contains(['\n', '\r', '\0'])
+                        || args.chars().any(|ch| matches!(ch, '\n' | '\r' | '\0'))
                     {
                         bail!("Invalid Hyprland dispatcher or arguments for {key}");
                     }

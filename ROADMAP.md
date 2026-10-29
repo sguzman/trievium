@@ -50,16 +50,16 @@ The original copy HUD and `items.json` must remain independent from
 
 ### Verified checkpoint and dependencies
 
-- [Green CI `56882173`](https://github.com/sguzman/trievium/actions/runs/40969183014):
-  **88 Rust tests**, strict Clippy, both HUDs' keyboard E2E, editor first-run,
-  optimized release build and verified checksum. Native egui click tests
-  now cover **Done**, **New command** and **New group**. An incomplete
-  command cannot overwrite the registry; after completing the draft, the
-  background atomic save succeeds. A new group can be created and saved
-  without losing its descendant command.
-  These deterministic UI tests supplement, but do **not** substitute for,
-  live Hyprland keyboard/focus/visual acceptance.
-- Prior green checks: [86 tests / Done interaction](https://github.com/sguzman/trievium/actions/runs/40963626290),
+- [Green CI `add402eb`](https://github.com/sguzman/trievium/actions/runs/40970574576):
+  **90 Rust tests**, strict Clippy, original copy/command HUD Wayland E2E,
+  editor first-run, optimized release build and package checksum. Native egui
+  pointer tests now cover **Done**, **New command**, **New group**, **Delete**,
+  **Up** and **Down**, with persisted create/delete/reorder effects and
+  original `items.json` isolation. Incomplete drafts cannot be saved; valid
+  drafts survive atomic save/reload. These deterministic UI checks do **not**
+  substitute for live Hyprland focus, keyboard or visual acceptance.
+- Prior green checks: [88 tests / native create](https://github.com/sguzman/trievium/actions/runs/40969183014),
+  [86 tests / Done interaction](https://github.com/sguzman/trievium/actions/runs/40963626290),
   [85 tests / external-edit consistency](https://github.com/sguzman/trievium/actions/runs/40960139391), [83 tests / indexed HUD](https://github.com/sguzman/trievium/actions/runs/40958445466),
   [79 tests / prior round](https://github.com/sguzman/trievium/actions/runs/40954486737), [76 tests / round 3](https://github.com/sguzman/trievium/actions/runs/40951700563),
   [71 tests / round 2](https://github.com/sguzman/trievium/actions/runs/40944215754),

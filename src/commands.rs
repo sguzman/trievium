@@ -570,7 +570,13 @@ impl eframe::App for CommandPicker {
         ui.painter()
             .rect_filled(ui.max_rect(), 0.0, Appearance::background(theme));
         if ui.input(|input| input.key_pressed(egui::Key::Escape)) {
-            std::process::exit(0);
+            if let Some(editor) = self.editor.as_mut() {
+                if editor.close_requested() {
+                    std::process::exit(0);
+                }
+            } else {
+                std::process::exit(0);
+            }
         }
         if self.pending_editor.is_some() {
             ui.label("Opening command editor…");

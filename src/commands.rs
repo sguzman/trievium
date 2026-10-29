@@ -823,6 +823,21 @@ mod tests {
     }
 
     #[test]
+    fn group_prefix_requires_actual_descendant_command() {
+        let mut config = demo();
+        config.groups.push(Group {
+            prefix: "x".into(),
+            label: "Unused".into(),
+        });
+        assert!(config.validate().is_err());
+        config.groups.last_mut().unwrap().prefix = "a".into();
+        assert!(config.validate().is_ok());
+        // A group must be strictly above the command it describes.
+        config.groups.last_mut().unwrap().prefix = "a t".into();
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
     fn command_file_never_requires_or_mutates_items_json() {
         let dir =
             std::env::temp_dir().join(format!("trievium-command-test-{}", std::process::id()));

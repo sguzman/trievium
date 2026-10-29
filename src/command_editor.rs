@@ -265,8 +265,11 @@ impl CommandEditor {
                 .add_enabled(can_modify, egui::Button::new("Close"))
                 .clicked();
         });
-        if close && self.close_requested() {
-            return EditorEvent::Exit;
+        if close {
+            if self.close_requested() {
+                return EditorEvent::Exit;
+            }
+            close = false;
         }
         if self.confirm_exit {
             ui.horizontal(|ui| {

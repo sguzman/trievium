@@ -17,12 +17,11 @@ the original copy picker continues to select at the shortest unique prefix.
 bind = SUPER, SPACE, exec, trievium commands
 ```
 
-`trievium commands init` creates an empty registry without overwriting
+`trievium commands edit` opens the separate native command/group editor. It saves atomically and refuses conflicting external changes. `trievium commands init` creates an empty registry without overwriting
 existing data; `trievium commands validate` checks it. See
 [command-tree usage, JSON example, and safety notes](docs/COMMANDS.md)
-and the [weighted development roadmap](ROADMAP.md). The native command
-editor and real Hyprland desktop acceptance remain in scope and are
-**not yet finished**.
+and the [weighted development roadmap](ROADMAP.md). The command editor is implemented but needs CI and real desktop acceptance;
+**do not treat this experimental mode as released yet**.
 
 
 ## Quick start (EndeavourOS / Hyprland)
@@ -102,7 +101,7 @@ Stable builds are published on [GitHub Releases](https://github.com/sguzman/trie
 - `wl-copy` runs without `--foreground`, leaving clipboard ownership alive after the UI exits. Paste normally into the previous application.
 - Headless CI verifies Unicode and multiline bytes through the same subprocess boundary using a local file writer; it does not simulate a real Wayland clipboard.
 
-The on-disk library JSON schema remains **`version: 1`**, independent of application v1.0.0, and has an `entries` array. Each entry has `label` and `text`; optional `key` reserves a prefix-free shortcut. The legacy `priority` field remains readable in existing JSON but is ignored. Keys use 1-4 ASCII letters. An assigned key cannot prefix any other key. Invalid configurations (including pinned-key collisions) are rejected before launching. There is no automatic paste, command execution, network access, or telemetry.
+The on-disk library JSON schema remains **`version: 1`**, independent of application v1.0.0, and has an `entries` array. Each entry has `label` and `text`; optional `key` reserves a prefix-free shortcut. The legacy `priority` field remains readable in existing JSON but is ignored. Keys use 1-4 ASCII letters. An assigned key cannot prefix any other key. Invalid configurations (including pinned-key collisions) are rejected before launching. The original copy picker has no automatic paste, command execution, network access, or telemetry. The separate command-tree mode does execute explicitly configured actions.
 
 ```json
 {

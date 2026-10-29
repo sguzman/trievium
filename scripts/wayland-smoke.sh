@@ -348,3 +348,31 @@ wait_for_picker_exit
 cmp "$command_config" "$XDG_RUNTIME_DIR/commands-before-editor.json"
 cmp "$config" "$XDG_RUNTIME_DIR/copy-before-commands.json"
 echo "Wayland command editor E2E passed: native editor opened and closed without modifying either library."
+
+
+# On a fresh installation, opening the command editor first must initialize
+# only its own registry; no separate 'commands init' prerequisite is required.
+fresh_commands="$XDG_RUNTIME_DIR/first-run-commands.json"
+test ! -e "$fresh_commands"
+./target/debug/trievium commands edit --config "$fresh_commands" >"$XDG_RUNTIME_DIR/command-first-run.log" 2>&1 &
+picker_pid=$!
+found=""
+for _ in $(seq 1 100); do
+  found=$(swaymsg -s "$sway_sock" -t get_tree | grep -o '"app_id": "trievium"' | head -1 || true)
+  if [[ -n "$found" ]]; then
+    break
+  fi
+  sleep 0.1
+done
+if [[ -z "$found" || ! -f "$fresh_commands" ]]; then
+  echo "First-run command editor did not create and open its own registry" >&2
+  cat "$XDG_RUNTIME_DIR/command-first-run.log" >&2
+  exit 1
+fi
+swaymsg -s "$sway_sock" '[app_id="trievium"] focus'
+sleep 0.2
+wtype -k Escape
+wait_for_picker_exit
+./target/debug/trievium commands validate --config "$fresh_commands"
+cmp "$config" "$XDG_RUNTIME_DIR/copy-before-commands.json"
+echo "Wayland fresh-editor E2E passed: independent registry initialized with no copy-library mutation."

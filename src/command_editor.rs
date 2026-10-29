@@ -272,8 +272,7 @@ impl CommandEditor {
                 }
                 if ui.radio(!is_exec, "Hyprland").clicked() && is_exec {
                     entry.action = Action::Hyprland {
-                        dispatcher: String::new(),
-                        args: String::new(),
+                        expression: "hl.dsp.window.fullscreen({ mode = \"fullscreen\" })".into(),
                         focus_original: true,
                     };
                     self.dirty = true;
@@ -300,16 +299,11 @@ impl CommandEditor {
                     }
                 }
                 Action::Hyprland {
-                    dispatcher,
-                    args,
+                    expression,
                     focus_original,
                 } => {
-                    ui.horizontal(|ui| {
-                        ui.label("Dispatcher");
-                        self.dirty |= ui.text_edit_singleline(dispatcher).changed();
-                        ui.label("Arguments");
-                        self.dirty |= ui.text_edit_singleline(args).changed();
-                    });
+                    ui.label("Hyprland 0.55+ Lua dispatcher (hl.dsp.*)");
+                    self.dirty |= ui.text_edit_singleline(expression).changed();
                     self.dirty |= ui
                         .checkbox(
                             focus_original,

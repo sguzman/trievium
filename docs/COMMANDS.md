@@ -13,6 +13,7 @@ shortest-unique-prefix semantics.
 | `trievium manage` | Original copy library editor |
 | `trievium commands` | New command-tree HUD |
 | `trievium commands init` | Create empty registry, refusing overwrite |
+| `trievium commands edit` | Open native command/group editor |
 | `trievium commands validate` | Validate registry without modifying it |
 | `trievium commands config-path` | Print independent registry location |
 
@@ -80,7 +81,7 @@ Escape cancels, Backspace edits, and clicking a HUD branch advances it.
 
 Execution uses direct argv-based process spawning (never `sh -c`). Hyprland
 commands are dispatched through `hyprctl`. Focus-dependent actions must
-set `focus_original: true`: the HUD captures the window originally focused
+set `focus_original: true` (the default): the HUD captures the window originally focused
 before mapping, checks that it remains mapped, restores focus and confirms
 that focus before invoking the dispatcher. Global dispatchers such as
 `workspace` use `focus_original: false`. Hyprland return codes are checked.
@@ -90,8 +91,9 @@ the HUD visible for correction, rather than pretending success.
 ## Acceptance and remaining work
 
 This is a first implementation slice, **not** a completed command-mode
-release. A GUI command editor, atomic editing persistence, full user-facing
-Wayland/Hyprland dogfooding, and final release checks remain required. The
+release. The GUI command editor and atomic external-edit-safe writes are now implemented,
+but still require CI and user-facing Hyprland dogfooding. Final release checks
+remain required. The
 copy HUD must be regression-tested throughout.
 
 See [ROADMAP.md](../ROADMAP.md) for evidence-weighted completion accounting.

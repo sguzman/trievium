@@ -31,3 +31,25 @@ A perpetual maintenance queue has no completion percentage. No additional capabi
 ## Evidence rule
 
 Acceptance must be backed by actual behavior and tests. A subsequently discovered purpose-defeating regression is a bug to resolve, not something overridden by a prior 100% indicator.
+
+
+## M3 — Command-tree HUD (owner-authorized expansion, 2026-10-29)
+
+This is a **new, finite scope** explicitly requested after acceptance of the
+copy-mode MVP, not a retroactive reopening of earlier milestones.
+Keep the copy HUD and `items.json` entirely intact. The new command mode
+must use `commands.json`. The following weights total 100%; only verification
+of acceptance criteria contributes to completion.
+
+| ID / weight | Deliverable and objective acceptance criteria | Dependencies | Status |
+| --- | --- | --- | --- |
+| 🧱 C1 · 15% | `trievium commands` CLI independent of original picker, session locking and no copy config reads/writes; copy CLI remains compatible | Existing copy app | Active — code committed, CI pending |
+| 🗂️ C2 · 20% | Versioned separate `commands.json`; invalid and conflicting sequences rejected; safe initialization and round-trip/unit tests | C1 | Active — code committed, CI pending |
+| ⌨️ C3 · 30% | Live native HUD, nested exact sequences, actionable commands, Escape/Backspace/click, Hyprland original-focus safety, nonblocking execution; automated and Hyprland QA | C2 | Active — implemented, CI + desktop QA pending |
+| 🛠️ C4 · 20% | Native editor for groups and command CRUD/reorder, atomic writes with external-edit conflict detection, validation, usable picker/editor transition | C2–C3 | Pending |
+| 🧪 C5 · 15% | Regression tests for original copy mode, CI, documentation, actual Hyprland dogfooding, packaging and release readiness | C1–C4 | Pending |
+
+**Initial baseline: 0% verified** for this new scope. Committed but untested
+work remains active, not complete. Do not combine this new-scope percentage with
+the already accepted copy MVP. The implementation branch is
+`feature/command-tree`; see [command mode specification](docs/COMMANDS.md).

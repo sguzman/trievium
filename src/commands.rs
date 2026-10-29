@@ -296,10 +296,7 @@ impl CommandIndex {
     }
 
     fn choices(&self, prefix: &str) -> &[Choice] {
-        self.branches
-            .get(prefix)
-            .map(Vec::as_slice)
-            .unwrap_or(&[])
+        self.branches.get(prefix).map(Vec::as_slice).unwrap_or(&[])
     }
 
     fn resolve(&self, typed: &str) -> Resolution {

@@ -76,7 +76,9 @@ fn write_atomic(
                     file.write_all(&next)?;
                     file.sync_all()?;
                     if fs::canonicalize(path)? != target || fs::read(path)? != expected {
-                        bail!("Command destination or contents changed during save. Reopen before editing.");
+                        bail!(
+                            "Command destination or contents changed during save. Reopen before editing."
+                        );
                     }
                     fs::rename(&candidate, target)
                         .with_context(|| format!("Replacing {}", target.display()))?;
@@ -543,7 +545,11 @@ mod tests {
         fs::create_dir_all(dir.join("config")).unwrap();
         let target = dir.join("dotfiles/commands.json");
         let link = dir.join("config/commands.json");
-        fs::write(&target, serde_json::to_vec(&CommandConfig::empty()).unwrap()).unwrap();
+        fs::write(
+            &target,
+            serde_json::to_vec(&CommandConfig::empty()).unwrap(),
+        )
+        .unwrap();
         symlink(&target, &link).unwrap();
         let editor = CommandEditor::new(link.clone()).unwrap();
         assert_eq!(editor.target, fs::canonicalize(&target).unwrap());
@@ -558,7 +564,12 @@ mod tests {
             },
         });
         write_atomic(&link, &editor.target, &updated, &editor.original).unwrap();
-        assert!(fs::symlink_metadata(&link).unwrap().file_type().is_symlink());
+        assert!(
+            fs::symlink_metadata(&link)
+                .unwrap()
+                .file_type()
+                .is_symlink()
+        );
         assert_eq!(fs::read_link(&link).unwrap(), target);
         assert_eq!(CommandConfig::load(&target).unwrap().commands.len(), 1);
         fs::remove_dir_all(dir).unwrap();
@@ -590,7 +601,12 @@ mod tests {
         assert!(result.is_err());
         assert_eq!(fs::read(&replacement).unwrap(), base);
         assert_eq!(fs::read(&original).unwrap(), base);
-        assert!(fs::symlink_metadata(&link).unwrap().file_type().is_symlink());
+        assert!(
+            fs::symlink_metadata(&link)
+                .unwrap()
+                .file_type()
+                .is_symlink()
+        );
         fs::remove_dir_all(dir).unwrap();
     }
 

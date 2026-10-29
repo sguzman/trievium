@@ -7,6 +7,8 @@
 //! operate on unrelated clients.
 use serde_json::Value;
 use std::process::Command;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
@@ -44,11 +46,78 @@ pub fn focus_new_popup(width: i32, height: i32) {
     start_popup_focus(width, height, true);
 }
 
-/// Command actions can refocus their originating window immediately after
-/// selection. Never schedule a later popup focus retry that might steal focus
-/// back just before a focus-dependent dispatcher executes.
-pub fn focus_new_command_popup(width: i32, height: i32) {
-    start_popup_focus(width, height, false);
+/// Serializes the command HUD's initial compositor focus setup against the
+/// subsequently chosen action. Never blocks egui; action work uses a worker.
+#[derive(Clone, Default)]
+pub struct CommandPopupFocus {
+    gate: Arc<Mutex<()>>,
+    action_started: Arc<AtomicBool>,
+}
+
+impl CommandPopupFocus {
+    pub fn mark_action_started(&self) {
+        // Mark before spawning the action worker, so a not-yet-mapped HUD
+        // cannot focus itself after the original window was restored.
+        self.action_started.store(true, Ordering::SeqCst);
+    }
+
+    pub fn run_action<T>(&self, action: impl FnOnce() -> T) -> T {
+        let _guard = self.gate.lock().unwrap_or_else(|poison| poison.into_inner());
+        action()
+    }
+
+    pub fn recover_after_error(&self) {
+        self.run_action(|| {
+            if std::env::var_os("HYPRLAND_INSTANCE_SIGNATURE").is_some_and(|s| !s.is_empty()) {
+                if let Some(address) = our_floating_window_address(std::process::id()) {
+                    let expression = format!(
+                        "hl.dsp.focus({{ window = \"address:{address}\" }})"
+                    );
+                    if let Err(error) = dispatch_lua(&expression) {
+                        eprintln!("trievium: could not restore command HUD focus: {error}");
+                    }
+                }
+            }
+            self.action_started.store(false, Ordering::SeqCst);
+        });
+    }
+}
+
+/// A command may execute as soon as the popup receives its first key.
+/// Prevent delayed window-map geometry/focus commands from racing with that
+/// action, otherwise a focus-dependent dispatcher could hit the HUD instead.
+pub fn focus_new_command_popup(width: i32, height: i32) -> CommandPopupFocus {
+    let focus = CommandPopupFocus::default();
+    if std::env::var_os("HYPRLAND_INSTANCE_SIGNATURE").is_some_and(|s| !s.is_empty()) {
+        let pid = std::process::id();
+        let worker_focus = focus.clone();
+        thread::spawn(move || focus_command_when_mapped(pid, width, height, worker_focus));
+    }
+    focus
+}
+
+fn focus_command_when_mapped(pid: u32, width: i32, height: i32, focus: CommandPopupFocus) {
+    for _ in 0..RETRIES {
+        if let Some((address, floating)) = our_window_address(pid) {
+            focus.run_action(|| {
+                if focus.action_started.load(Ordering::SeqCst) {
+                    return;
+                }
+                if !floating {
+                    eprintln!(
+                        "trievium: command HUD mapped tiled despite the pre-map rule; closing"
+                    );
+                    std::process::exit(1);
+                }
+                if let Err(error) = configure_our_window(&address, width, height) {
+                    eprintln!("trievium: cannot configure command HUD: {error}");
+                }
+            });
+            return;
+        }
+        thread::sleep(RETRY_DELAY);
+    }
+    eprintln!("trievium: timed out locating its command HUD");
 }
 
 fn start_popup_focus(width: i32, height: i32, delayed_correction: bool) {

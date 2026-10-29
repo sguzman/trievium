@@ -309,28 +309,9 @@ impl CommandEditor {
             save = ui
                 .add_enabled(can_modify, egui::Button::new("Save"))
                 .clicked();
-            let done_button = ui.add_enabled(can_modify, egui::Button::new("Done"));
-            #[cfg(debug_assertions)]
-            {
-                use std::sync::atomic::{AtomicUsize, Ordering};
-                static QA_SAMPLES: AtomicUsize = AtomicUsize::new(0);
-                if std::env::var_os("TRIEVIUM_QA_POINTER").is_some()
-                    && QA_SAMPLES.fetch_add(1, Ordering::Relaxed) < 120
-                {
-                    let pointer = ui.ctx().input(|i| {
-                        (i.pointer.hover_pos(), i.pointer.any_click(), i.pointer.any_down())
-                    });
-                    eprintln!(
-                        "Trievium QA pointer: done={:?}, hover={:?}, click={}, down={}, hit={}",
-                        done_button.rect,
-                        pointer.0,
-                        pointer.1,
-                        pointer.2,
-                        done_button.clicked()
-                    );
-                }
-            }
-            finish = done_button.clicked();
+            finish = ui
+                .add_enabled(can_modify, egui::Button::new("Done"))
+                .clicked();
             discard = ui
                 .add_enabled(can_modify, egui::Button::new("Discard"))
                 .clicked();

@@ -122,3 +122,22 @@ reversible fullscreen on the original window, global workspace
 switching, native command-editor CRUD and visual behavior, and
 copy-picker regression. See [docs/COMMANDS.md](docs/COMMANDS.md).
 Do not mark C3–C5 verified, merge, or release until that evidence exists.
+
+
+**Round 4 checkpoint: 35% verified** (previous 35%; **+0 percentage
+points**). Focused fixes within existing M3 scope: the native editor now
+caches editable program-argument text instead of rebuilding it on every
+paint; a bare relative `commands.json` path initializes correctly;
+interactive command modes acquire the single-instance lock *before*
+first-run registry creation to avoid double-launch races; and original
+Hyprland window-focus verification now tolerates a bounded compositor
+state-propagation delay without repeating the dispatcher. New tests cover
+argv selection caching, relative registry paths, group collisions, and
+second-HUD rejection. [Green CI run 40953615508](https://github.com/sguzman/trievium/actions/runs/40953615508)
+verifies the relative-path CLI and existing Wayland regressions;
+[green run 40953760893](https://github.com/sguzman/trievium/actions/runs/40953760893)
+covers the additional group validation. At the time of this checkpoint,
+the newest concurrent-launch/focus checks were still running.
+Progress remains capped at 35% because C3–C5 still require actual
+interactive Hyprland and editor acceptance in the owner's desktop
+session. No merge, tag, or release.

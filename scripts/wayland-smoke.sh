@@ -321,3 +321,30 @@ if [[ "$(wl-paste -n 2>/dev/null || true)" != "Brief selected" ]]; then
   exit 1
 fi
 echo "Wayland commands E2E passed: exact sequence executed; clipboard and items preserved."
+
+
+# Native command editor is independently launchable and Escape must not
+# modify the command registry (or the copy library).
+cp "$command_config" "$XDG_RUNTIME_DIR/commands-before-editor.json"
+./target/debug/trievium commands edit --config "$command_config" >"$XDG_RUNTIME_DIR/command-editor.log" 2>&1 &
+picker_pid=$!
+found=""
+for _ in $(seq 1 100); do
+  found=$(swaymsg -s "$sway_sock" -t get_tree | grep -o '"app_id": "trievium"' | head -1 || true)
+  if [[ -n "$found" ]]; then
+    break
+  fi
+  sleep 0.1
+done
+if [[ -z "$found" ]]; then
+  echo "Command editor did not map on Wayland" >&2
+  cat "$XDG_RUNTIME_DIR/command-editor.log" >&2
+  exit 1
+fi
+swaymsg -s "$sway_sock" '[app_id="trievium"] focus'
+sleep 0.2
+wtype -k Escape
+wait_for_picker_exit
+cmp "$command_config" "$XDG_RUNTIME_DIR/commands-before-editor.json"
+cmp "$config" "$XDG_RUNTIME_DIR/copy-before-commands.json"
+echo "Wayland command editor E2E passed: native editor opened and closed without modifying either library."

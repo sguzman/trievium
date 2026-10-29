@@ -366,6 +366,31 @@ mod tests {
     use super::*;
 
     #[test]
+    fn new_editor_reads_current_registry_instead_of_stale_picker_state() {
+        let dir = std::env::temp_dir().join(format!(
+            "trievium-command-snapshot-test-{}", std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("commands.json");
+        crate::commands::initialize_empty(&path).unwrap();
+        let mut changed = CommandConfig::empty();
+        changed.commands.push(CommandEntry {
+            label: "Updated externally".into(),
+            sequence: "a t".into(),
+            action: Action::Exec {
+                program: "kitty".into(),
+                args: Vec::new(),
+            },
+        });
+        fs::write(&path, serde_json::to_vec(&changed).unwrap()).unwrap();
+        let editor = CommandEditor::new(path.clone()).unwrap();
+        assert_eq!(editor.config.commands[0].label, "Updated externally");
+        assert_eq!(editor.original, fs::read(&path).unwrap());
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
     fn atomic_command_save_detects_conflicts_without_touching_copy_data() {
         let dir = std::env::temp_dir().join(format!(
             "trievium-command-editor-test-{}",

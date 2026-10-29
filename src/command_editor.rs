@@ -19,6 +19,9 @@ type PendingReload = Arc<Mutex<Option<Result<(Vec<u8>, CommandConfig)>>>>;
 
 pub struct CommandEditor {
     path: PathBuf,
+    /// Stable, fully resolved destination. Atomic rename must update this
+    /// target rather than replacing a config-store symlink at `path`.
+    target: PathBuf,
     original: Vec<u8>,
     pub config: CommandConfig,
     selected: Option<usize>,
@@ -30,17 +33,25 @@ pub struct CommandEditor {
     done_ready: bool,
 }
 
-fn write_atomic(path: &Path, config: &CommandConfig, expected: &[u8]) -> Result<Vec<u8>> {
+fn write_atomic(
+    path: &Path,
+    target: &Path,
+    config: &CommandConfig,
+    expected: &[u8],
+) -> Result<Vec<u8>> {
     config.validate()?;
+    if fs::canonicalize(path).with_context(|| format!("Resolving {}", path.display()))? != target {
+        bail!("Command registry symlink or destination changed. Discard/reopen before saving.");
+    }
     if fs::read(path).with_context(|| format!("Reading {}", path.display()))? != expected {
         bail!("Commands changed outside this editor. Discard/reopen before saving.");
     }
     let mut next = serde_json::to_vec_pretty(config)?;
     next.push(b'\n');
-    let parent = path
+    let parent = target
         .parent()
         .context("Command file has no parent directory")?;
-    let name = path.file_name().context("Command file has no filename")?;
+    let name = target.file_name().context("Command file has no filename")?;
     let mut options = fs::OpenOptions::new();
     options.write(true).create_new(true);
     #[cfg(unix)]
@@ -63,11 +74,11 @@ fn write_atomic(path: &Path, config: &CommandConfig, expected: &[u8]) -> Result<
                     temp_path = Some(candidate.clone());
                     file.write_all(&next)?;
                     file.sync_all()?;
-                    if fs::read(path)? != expected {
-                        bail!("Commands changed during the save. Reopen before editing.");
+                    if fs::canonicalize(path)? != target || fs::read(path)? != expected {
+                        bail!("Command destination or contents changed during save. Reopen before editing.");
                     }
-                    fs::rename(&candidate, path)
-                        .with_context(|| format!("Replacing {}", path.display()))?;
+                    fs::rename(&candidate, target)
+                        .with_context(|| format!("Replacing {}", target.display()))?;
                     return Ok(());
                 }
                 Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
@@ -96,9 +107,12 @@ fn read_snapshot(path: &Path) -> Result<(Vec<u8>, CommandConfig)> {
 
 impl CommandEditor {
     pub fn new(path: PathBuf) -> Result<Self> {
+        let target = fs::canonicalize(&path)
+            .with_context(|| format!("Resolving command registry {}", path.display()))?;
         let (original, config) = read_snapshot(&path)?;
         Ok(Self {
             path,
+            target,
             original,
             config,
             selected: None,
@@ -126,13 +140,14 @@ impl CommandEditor {
         self.error = None;
         self.finish_after_save = finish;
         let path = self.path.clone();
+        let target = self.target.clone();
         let original = self.original.clone();
         let config = self.config.clone();
         let answer = Arc::new(Mutex::new(None));
         let sender = Arc::clone(&answer);
         self.pending = Some(answer);
         std::thread::spawn(move || {
-            let result = write_atomic(&path, &config, &original);
+            let result = write_atomic(&path, &target, &config, &original);
             if let Ok(mut slot) = sender.lock() {
                 *slot = Some(result);
             }
@@ -185,6 +200,10 @@ impl CommandEditor {
                     Ok((bytes, config)) => {
                         self.original = bytes;
                         self.config = config;
+                        // Discard is a fresh snapshot: subsequent saves use
+                        // the current target of the user's config-store link.
+                        self.target = fs::canonicalize(&self.path)
+                            .unwrap_or_else(|_| self.target.clone());
                         self.selected = None;
                         self.error = None;
                         self.dirty = false;
@@ -459,10 +478,11 @@ mod tests {
                 args: Vec::new(),
             },
         });
-        let updated = write_atomic(&path, &config, &before).unwrap();
+        let target = fs::canonicalize(&path).unwrap();
+        let updated = write_atomic(&path, &target, &config, &before).unwrap();
         assert_eq!(fs::read(&path).unwrap(), updated);
         fs::write(&path, b"externally changed").unwrap();
-        assert!(write_atomic(&path, &config, &updated).is_err());
+        assert!(write_atomic(&path, &target, &config, &updated).is_err());
         assert_eq!(fs::read(&items).unwrap(), b"secret copy items");
         fs::remove_dir_all(dir).unwrap();
     }

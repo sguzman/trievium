@@ -79,3 +79,26 @@ focus policy is also awaiting its own CI run and local Hyprland QA.
 Next: confirm the branch HEAD CI, then run the bounded manual checklist
 in [docs/COMMANDS.md](docs/COMMANDS.md) inside the owner's actual Hyprland
 session. Do not merge or publish before those checks pass.
+
+
+**Round 3 checkpoint: 35% verified** (previous 35%; **+0 percentage
+points**). This round addressed concrete correctness and responsiveness
+defects within C3/C4: atomic writes now preserve configuration-store
+symlinks and reject mid-edit link retargeting; the editor preserves
+unsaved changes, prevents exit while saving, and transfers registry
+ownership to the worker without a large egui-thread clone. Command
+launching now serializes its original-window focus restoration against
+initial HUD mapping so a late compositor focus operation cannot target
+the wrong window. The command HUD refocuses on execution errors.
+[Green CI run 40951700563](https://github.com/sguzman/trievium/actions/runs/40951700563)
+verified **76 Rust tests**, strict Clippy, original copy/command HUD
+keyboard E2E, command editor launch, first-run registry isolation, and
+release-build checksum. The following documentation-only change does
+not affect the tested implementation.
+
+**Blocking acceptance:** C3/C4/C5 continue to require owner-session
+Hyprland focus/float/fullscreen/workspace testing and interactive
+command-editor CRUD verification as defined in
+[docs/COMMANDS.md](docs/COMMANDS.md). None of those desktop checks can
+be claimed complete from headless Sway CI. No main merge or release
+has been performed.

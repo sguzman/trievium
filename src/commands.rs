@@ -369,11 +369,11 @@ pub fn run(args: &[String]) -> Result<()> {
         }
         _ => {}
     }
-    if !path.exists() && matches!(operation, "pick" | "edit") {
-        initialize_empty(&path)?;
-    }
-    let config = CommandConfig::load(&path)?;
+    // Read-only checks must work even while a HUD is open. Interactive
+    // modes acquire the singleton before first-run registry initialization:
+    // two rapid Super+Space presses must not race a create_new/write pair.
     if operation == "validate" {
+        let config = CommandConfig::load(&path)?;
         println!(
             "Valid command registry ({} commands)",
             config.commands.len()
@@ -387,6 +387,10 @@ pub fn run(args: &[String]) -> Result<()> {
         }
         value => value,
     };
+    if !path.exists() {
+        initialize_empty(&path)?;
+    }
+    let config = CommandConfig::load(&path)?;
     let original_window = hyprland::focused_window_before_popup();
     let editing = operation == "edit";
     let height = if editing {

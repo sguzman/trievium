@@ -537,6 +537,109 @@ mod tests {
     use super::*;
 
     #[test]
+    fn native_move_buttons_persist_reordering_in_both_directions() {
+        let dir = std::env::temp_dir().join(format!(
+            "trievium-command-reorder-ui-test-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("commands.json");
+        let mut config = CommandConfig::empty();
+        for (sequence, label) in [("a t", "Terminal"), ("w f", "Fullscreen")] {
+            config.commands.push(CommandEntry {
+                sequence: sequence.into(),
+                label: label.into(),
+                action: Action::Exec {
+                    program: "true".into(),
+                    args: Vec::new(),
+                },
+            });
+        }
+        fs::write(&path, serde_json::to_vec_pretty(&config).unwrap()).unwrap();
+        let mut editor = CommandEditor::new(path.clone()).unwrap();
+        editor.select_command(1);
+        let ctx = egui::Context::default();
+        let mut timestamp = 0.0;
+        let click = |editor: &mut CommandEditor, x: f32, ctx: &egui::Context, time: &mut f64| {
+            let target = egui::pos2(x, 46.0);
+            let frame = |editor: &mut CommandEditor, events: Vec<egui::Event>, time: f64| {
+                ctx.run_ui(
+                    egui::RawInput {
+                        screen_rect: Some(egui::Rect::from_min_size(
+                            egui::Pos2::ZERO,
+                            egui::vec2(1280.0, 720.0),
+                        )),
+                        time: Some(time),
+                        events,
+                        ..Default::default()
+                    },
+                    |ui| {
+                        let _ = editor.ui(ui);
+                    },
+                )
+                .drop_without_applying_deltas();
+            };
+            let pointer = |pressed| egui::Event::PointerButton {
+                pos: target,
+                button: egui::PointerButton::Primary,
+                pressed,
+                modifiers: egui::Modifiers::NONE,
+            };
+            frame(editor, Vec::new(), *time);
+            *time += 0.1;
+            frame(
+                editor,
+                vec![egui::Event::PointerMoved(target), pointer(true)],
+                *time,
+            );
+            *time += 0.1;
+            frame(editor, vec![pointer(false)], *time);
+            *time += 0.1;
+        };
+        click(&mut editor, 190.0, &ctx, &mut timestamp);
+        assert_eq!(
+            editor.config.commands[0].sequence,
+            "w f",
+            "native Up did not move the selected command"
+        );
+        assert_eq!(editor.selected, Some(0));
+        editor.begin_save(false);
+        for _ in 0..250 {
+            editor.poll_save(&ctx);
+            if !editor.busy() {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert!(!editor.busy());
+        assert!(!editor.dirty);
+        assert_eq!(CommandConfig::load(&path).unwrap().commands[0].sequence, "w f");
+
+        click(&mut editor, 240.0, &ctx, &mut timestamp);
+        assert_eq!(
+            editor.config.commands[1].sequence,
+            "w f",
+            "native Down did not move the selected command"
+        );
+        assert_eq!(editor.selected, Some(1));
+        editor.begin_save(false);
+        for _ in 0..250 {
+            editor.poll_save(&ctx);
+            if !editor.busy() {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert!(!editor.busy());
+        assert!(!editor.dirty);
+        let persisted = CommandConfig::load(&path).unwrap();
+        assert_eq!(persisted.commands[0].sequence, "a t");
+        assert_eq!(persisted.commands[1].sequence, "w f");
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
     fn native_delete_command_button_removes_selected_entry_and_persists() {
         let dir = std::env::temp_dir().join(format!(
             "trievium-command-delete-ui-test-{}",

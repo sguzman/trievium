@@ -1,5 +1,6 @@
 pub mod appearance;
 pub mod clipboard;
+pub mod command_editor;
 pub mod colors;
 pub mod commands;
 pub mod config;

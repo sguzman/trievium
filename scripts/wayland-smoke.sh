@@ -463,7 +463,7 @@ fi
 swaymsg -s "$sway_sock" '[app_id="trievium"] focus' > /dev/null
 sleep 0.3
 # Fixed-layout editor header in this dedicated output: Save then Done.
-swaymsg -s "$sway_sock" 'seat seat0 cursor set 300 22' > /dev/null
+swaymsg -s "$sway_sock" 'seat seat0 cursor set 250 15' > /dev/null
 swaymsg -s "$sway_sock" 'seat seat0 cursor press button1' > /dev/null
 sleep 0.08
 swaymsg -s "$sway_sock" 'seat seat0 cursor release button1' > /dev/null

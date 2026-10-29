@@ -74,7 +74,9 @@ fn write_atomic(path: &Path, config: &CommandConfig, expected: &[u8]) -> Result<
         }
         bail!("Unable to reserve a temporary file for command registry")
     })();
-    if result.is_err() && let Some(path) = temp_path {
+    if result.is_err()
+        && let Some(path) = temp_path
+    {
         let _ = fs::remove_file(path);
     }
     result?;

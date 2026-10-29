@@ -83,10 +83,18 @@ fn write_atomic(path: &Path, config: &CommandConfig, expected: &[u8]) -> Result<
     Ok(next)
 }
 
+fn read_snapshot(path: &Path) -> Result<(Vec<u8>, CommandConfig)> {
+    let bytes = fs::read(path)
+        .with_context(|| format!("Reading command registry {}", path.display()))?;
+    let config: CommandConfig = serde_json::from_slice(&bytes)
+        .with_context(|| format!("Parsing command registry {}", path.display()))?;
+    config.validate()?;
+    Ok((bytes, config))
+}
+
 impl CommandEditor {
-    pub fn new(path: PathBuf, config: CommandConfig) -> Result<Self> {
-        let original = fs::read(&path)
-            .with_context(|| format!("Reading command registry {}", path.display()))?;
+    pub fn new(path: PathBuf) -> Result<Self> {
+        let (original, config) = read_snapshot(&path)?;
         Ok(Self {
             path,
             original,
@@ -178,9 +186,9 @@ impl CommandEditor {
             return EditorEvent::Exit;
         }
         if discard {
-            match CommandConfig::load(&self.path) {
-                Ok(config) => {
-                    self.original = fs::read(&self.path).unwrap_or_default();
+            match read_snapshot(&self.path) {
+                Ok((bytes, config)) => {
+                    self.original = bytes;
                     self.config = config;
                     self.selected = None;
                     self.error = None;

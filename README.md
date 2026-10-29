@@ -4,6 +4,27 @@
 
 Open it with a Hyprland keybind, press the displayed key sequence, and Trievium copies the selected text and exits. Click **Edit** to manage entries directly in the native application. No Enter, mouse, timeout, daemon, or auto-typing into other windows is required. A small focused shortcut input receives the keys; this is not a search box or editor. Trievium is a **selection launcher**, not a global text-expansion hook or a replacement for the Lexwright editor.
 
+
+## Command-tree HUD (new feature in development)
+
+A separate `trievium commands` mode turns `Super+Space` into a
+discoverable hierarchical command launcher. It uses its own
+`~/.config/trievium/commands.json` and **never reuses or migrates**
+`items.json`. A command executes only at its exact complete sequence;
+the original copy picker continues to select at the shortest unique prefix.
+
+```ini
+bind = SUPER, SPACE, exec, trievium commands
+```
+
+`trievium commands init` creates an empty registry without overwriting
+existing data; `trievium commands validate` checks it. See
+[command-tree usage, JSON example, and safety notes](docs/COMMANDS.md)
+and the [weighted development roadmap](ROADMAP.md). The native command
+editor and real Hyprland desktop acceptance remain in scope and are
+**not yet finished**.
+
+
 ## Quick start (EndeavourOS / Hyprland)
 
 Install Rust/Cargo and `wl-clipboard` using your system's package manager; you also need usual native compilation dependencies such as `pkgconf` and `libxkbcommon`. For an Arch-based environment with Rust already installed:

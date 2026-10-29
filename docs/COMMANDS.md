@@ -41,8 +41,7 @@ Example `commands.json`:
       "label": "Toggle fullscreen",
       "action": {
         "type": "hyprland",
-        "dispatcher": "fullscreen",
-        "args": "0",
+        "expression": "hl.dsp.window.fullscreen({ mode = \"fullscreen\" })",
         "focus_original": true
       }
     },
@@ -51,8 +50,7 @@ Example `commands.json`:
       "label": "QA workspace",
       "action": {
         "type": "hyprland",
-        "dispatcher": "workspace",
-        "args": "6",
+        "expression": "hl.dsp.focus({ workspace = 6 })",
         "focus_original": false
       }
     },
@@ -80,11 +78,13 @@ sequences are rejected; groups are display labels for prefix branches.
 Escape cancels, Backspace edits, and clicking a HUD branch advances it.
 
 Execution uses direct argv-based process spawning (never `sh -c`). Hyprland
-commands are dispatched through `hyprctl`. Focus-dependent actions must
+commands are dispatched through `hyprctl dispatch` using Hyprland 0.55+ Lua
+expressions (`hl.dsp.*`). The `expression` field must be a valid dispatcher
+expression. See [Hyprland dispatchers](https://wiki.hypr.land/configuring/core/dispatchers/).
+Focus-dependent actions must
 set `focus_original: true` (the default): the HUD captures the window originally focused
 before mapping, checks that it remains mapped, restores focus and confirms
-that focus before invoking the dispatcher. Global dispatchers such as
-`workspace` use `focus_original: false`. Hyprland return codes are checked.
+that focus before invoking the dispatcher. Workspace focus dispatchers use `focus_original: false`. Hyprland return codes are checked.
 Commands run on worker threads, not on the egui render path. Errors leave
 the HUD visible for correction, rather than pretending success.
 

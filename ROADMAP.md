@@ -61,6 +61,10 @@ The original copy HUD and `items.json` must remain independent from
   prefix validation, no-render-thread I/O, symlink preservation and
   unsaved-change confirmation. Verify every later branch HEAD in CI; earlier
   green runs never prove new commits green.
+- Follow-on hardening (CI pending): reject missing/unmapped/own-class
+  compositor clients as focus targets, and finish direct-editor registry
+  reads before launching Hyprland's time-bounded popup focus worker.
+  A successful previous CI run does not verify these new commits.
 - **Local blocker:** use the bounded [real Hyprland QA checklist](docs/COMMANDS.md)
   for reversible fullscreen on the original window, workspace switching,
   interactive command/editor CRUD, and the accepted copy picker. Headless

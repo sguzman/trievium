@@ -152,7 +152,13 @@ impl CommandConfig {
             if seen.contains(&key) {
                 bail!("Group {key} shadows an executable command");
             }
-            if !seen.iter().any(|sequence| sequence.starts_with(&key)) {
+            // A sorted prefix range finds a matching command in O(log n)
+            // rather than scanning the entire command library per group.
+            if !seen
+                .range(key.clone()..)
+                .next()
+                .is_some_and(|sequence| sequence.starts_with(&key))
+            {
                 bail!("Group {key} does not contain any commands");
             }
         }

@@ -508,6 +508,47 @@ mod tests {
     use super::*;
 
     #[test]
+    fn argv_editor_cache_only_rebuilds_when_selection_changes() {
+        let dir = std::env::temp_dir().join(format!(
+            "trievium-command-argv-test-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("commands.json");
+        crate::commands::initialize_empty(&path).unwrap();
+        let mut editor = CommandEditor::new(path).unwrap();
+        editor.config.commands.push(CommandEntry {
+            sequence: "a t".into(),
+            label: "Terminal".into(),
+            action: Action::Exec {
+                program: "kitty".into(),
+                args: vec!["--title".into(), "two words".into()],
+            },
+        });
+        editor.config.commands.push(CommandEntry {
+            sequence: "w f".into(),
+            label: "Fullscreen".into(),
+            action: Action::Hyprland {
+                expression: "hl.dsp.window.fullscreen({ mode = \"fullscreen\" })".into(),
+                focus_original: true,
+            },
+        });
+
+        editor.select_command(0);
+        assert_eq!(editor.args_text, "--title\ntwo words");
+        // The cached edit buffer is not recomputed on repaint or when the
+        // user edits the underlying command before explicitly reselecting.
+        editor.args_text.push_str("\n--class");
+        assert_eq!(editor.args_text, "--title\ntwo words\n--class");
+        editor.select_command(1);
+        assert!(editor.args_text.is_empty());
+        editor.select_command(0);
+        assert_eq!(editor.args_text, "--title\ntwo words");
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
     fn async_save_restores_editor_state_on_success_and_conflict() {
         let dir = std::env::temp_dir().join(format!(
             "trievium-command-worker-test-{}",

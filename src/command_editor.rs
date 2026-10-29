@@ -489,6 +489,62 @@ mod tests {
     use super::*;
 
     #[test]
+    fn async_save_restores_editor_state_on_success_and_conflict() {
+        let dir = std::env::temp_dir().join(format!(
+            "trievium-command-worker-test-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("commands.json");
+        crate::commands::initialize_empty(&path).unwrap();
+        let mut editor = CommandEditor::new(path.clone()).unwrap();
+        editor.config.commands.push(CommandEntry {
+            sequence: "a t".into(),
+            label: "Terminal".into(),
+            action: Action::Exec {
+                program: "kitty".into(),
+                args: Vec::new(),
+            },
+        });
+        editor.dirty = true;
+        editor.begin_save(false);
+        assert!(editor.config.commands.is_empty());
+        let ctx = egui::Context::default();
+        for _ in 0..250 {
+            editor.poll_save(&ctx);
+            if !editor.busy() {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert!(!editor.busy(), "worker save did not complete");
+        assert!(!editor.dirty);
+        assert_eq!(editor.config.commands.len(), 1);
+        assert_eq!(CommandConfig::load(&path).unwrap().commands.len(), 1);
+
+        editor.config.commands[0].label = "Changed in editor".into();
+        editor.dirty = true;
+        let external = fs::read(&path).unwrap();
+        fs::write(&path, b"external edit").unwrap();
+        editor.begin_save(false);
+        for _ in 0..250 {
+            editor.poll_save(&ctx);
+            if !editor.busy() {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert!(!editor.busy(), "conflicting worker save did not finish");
+        assert!(editor.dirty);
+        assert!(editor.error.is_some());
+        assert_eq!(editor.config.commands[0].label, "Changed in editor");
+        assert_eq!(editor.original, external);
+        assert_eq!(fs::read(&path).unwrap(), b"external edit");
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
     fn editor_never_exits_mid_save_or_discards_unsaved_changes_silently() {
         let dir = std::env::temp_dir().join(format!(
             "trievium-command-close-test-{}",

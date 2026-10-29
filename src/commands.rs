@@ -286,7 +286,7 @@ fn execute(action: &Action, original: Option<&str>) -> Result<()> {
                 let address = original.context(
                     "No original Hyprland window; cannot safely target a focused-window command",
                 )?;
-                hyprland::restore_original_focus(address)?;
+                hyprland::restore_original_focus(address).map_err(anyhow::Error::msg)?;
             }
             let output = Command::new("hyprctl")
                 .args(["dispatch", dispatcher, args])

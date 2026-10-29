@@ -41,7 +41,7 @@ jobs:
             echo "command init unexpectedly overwrote the registry" >&2
             exit 1
           fi
-          test -f "$config"
+          test ! -e "$config"
           ./target/debug/trievium init --config "$config"
           ./target/debug/trievium validate --config "$config"
           ./target/debug/trievium validate --config "$config" --theme light

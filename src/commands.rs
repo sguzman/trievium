@@ -391,8 +391,11 @@ pub fn run(args: &[String]) -> Result<()> {
     } else {
         None
     };
+    let visible_choices = config.choices("");
     let app = CommandPicker {
         config,
+        visible_prefix: String::new(),
+        visible_choices,
         config_path: path,
         editor,
         pending_editor: None,
@@ -419,6 +422,10 @@ type PendingEditor = Arc<Mutex<Option<Result<CommandEditor>>>>;
 
 struct CommandPicker {
     config: CommandConfig,
+    // Only regenerate visible entries when the prefix or registry changes,
+    // never on egui's every-frame paint path.
+    visible_prefix: String,
+    visible_choices: Vec<Choice>,
     config_path: PathBuf,
     editor: Option<CommandEditor>,
     pending_editor: Option<PendingEditor>,
@@ -431,6 +438,14 @@ struct CommandPicker {
 }
 
 impl CommandPicker {
+    fn refresh_choices(&mut self) {
+        let prefix = self.typed.to_ascii_uppercase();
+        if self.visible_prefix != prefix {
+            self.visible_choices = self.config.choices(&prefix);
+            self.visible_prefix = prefix;
+        }
+    }
+
     fn resize(ctx: &egui::Context, width: i32, height: i32) {
         if std::env::var_os("HYPRLAND_INSTANCE_SIGNATURE").is_some_and(|s| !s.is_empty()) {
             hyprland::resize_own_popup(width, height);
@@ -483,6 +498,7 @@ impl CommandPicker {
             Resolution::Selected(index) => self.choose(index),
             Resolution::Continue(prefix) => {
                 self.typed = prefix.to_ascii_lowercase();
+                self.refresh_choices();
                 self.error = None;
             }
         }
@@ -526,6 +542,7 @@ impl eframe::App for CommandPicker {
                         self.error = Some(format!("{error:#}"));
                         self.pending = None;
                         self.typed.clear();
+                        self.refresh_choices();
                     }
                 }
             } else {
@@ -557,6 +574,8 @@ impl eframe::App for CommandPicker {
                     let editor = self.editor.take().unwrap();
                     self.config = editor.config;
                     self.typed.clear();
+                    self.visible_prefix = String::from("stale");
+                    self.refresh_choices();
                     self.error = None;
                     let height = (118.0 + ROW_HEIGHT * self.config.choices("").len().min(8) as f32)
                         .clamp(185.0, 460.0);
@@ -598,8 +617,7 @@ impl eframe::App for CommandPicker {
                     ui.label("Running command…");
                 }
                 ui.separator();
-                let prefix = self.typed.to_ascii_uppercase();
-                let choices = self.config.choices(&prefix);
+                let choices = &self.visible_choices;
                 if self.config.commands.is_empty() {
                     ui.label("No commands configured in commands.json");
                 }
@@ -634,6 +652,7 @@ impl eframe::App for CommandPicker {
                         self.choose(index);
                     } else {
                         self.typed.push(key.to_ascii_lowercase());
+                        self.refresh_choices();
                     }
                 }
             });

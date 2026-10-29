@@ -112,10 +112,8 @@ impl CommandEditor {
         if self.pending.is_some() {
             return;
         }
-        if let Err(error) = self.config.validate() {
-            self.error = Some(format!("{error:#}"));
-            return;
-        }
+        // Validation and filesystem work happen inside write_atomic on
+        // the save worker, never on the egui/UI thread.
         if !self.dirty {
             if finish {
                 self.done_ready = true;

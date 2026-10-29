@@ -11,6 +11,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use crate::appearance::Appearance;
+use crate::command_editor::{CommandEditor, EditorEvent};
 use crate::hyprland;
 
 const MAX_SEQUENCE: usize = 12;
@@ -311,7 +312,7 @@ pub fn run(args: &[String]) -> Result<()> {
     let mut index = 0;
     while index < args.len() {
         match args[index].as_str() {
-            "init" | "validate" | "config-path" => operation = &args[index],
+            "init" | "validate" | "config-path" | "edit" => operation = &args[index],
             "--config" => {
                 index += 1;
                 override_path = Some(PathBuf::from(
@@ -363,14 +364,18 @@ pub fn run(args: &[String]) -> Result<()> {
         value => value,
     };
     let original_window = hyprland::focused_window_before_popup();
-    let height = (118.0 + ROW_HEIGHT * config.choices("").len().min(8) as f32).clamp(185.0, 460.0);
+    let editing = operation == "edit";
+    let height = if editing { 680.0 } else {
+        (118.0 + ROW_HEIGHT * config.choices("").len().min(8) as f32).clamp(185.0, 460.0)
+    };
+    let width = if editing { 900.0 } else { 560.0 };
     let native = eframe::NativeOptions {
         renderer: eframe::Renderer::Glow,
         system_font_fallback: false,
         viewport: egui::ViewportBuilder::default()
             .with_title("Trievium Commands")
             .with_app_id("trievium")
-            .with_inner_size([560.0, height])
+            .with_inner_size([width, height])
             .with_min_inner_size([400.0, 160.0])
             .with_decorations(false)
             .with_resizable(true)
@@ -378,9 +383,16 @@ pub fn run(args: &[String]) -> Result<()> {
         ..Default::default()
     };
     hyprland::prepare_floating_popup().map_err(anyhow::Error::msg)?;
-    hyprland::focus_new_popup(560, height.round() as i32);
+    hyprland::focus_new_popup(width.round() as i32, height.round() as i32);
+    let editor = if editing {
+        Some(CommandEditor::new(path.clone(), config.clone())?)
+    } else {
+        None
+    };
     let app = CommandPicker {
         config,
+        config_path: path,
+        editor,
         original_window,
         typed: String::new(),
         error: None,
@@ -402,6 +414,8 @@ pub fn run(args: &[String]) -> Result<()> {
 
 struct CommandPicker {
     config: CommandConfig,
+    config_path: PathBuf,
+    editor: Option<CommandEditor>,
     original_window: Option<String>,
     typed: String,
     error: Option<String>,
@@ -411,6 +425,29 @@ struct CommandPicker {
 }
 
 impl CommandPicker {
+    fn resize(ctx: &egui::Context, width: i32, height: i32) {
+        if std::env::var_os("HYPRLAND_INSTANCE_SIGNATURE").is_some_and(|s| !s.is_empty()) {
+            hyprland::resize_own_popup(width, height);
+        } else {
+            ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(
+                width as f32,
+                height as f32,
+            )));
+        }
+    }
+
+    fn open_editor(&mut self, ctx: &egui::Context) {
+        match CommandEditor::new(self.config_path.clone(), self.config.clone()) {
+            Ok(editor) => {
+                self.editor = Some(editor);
+                self.typed.clear();
+                self.error = None;
+                Self::resize(ctx, 900, 680);
+            }
+            Err(error) => self.error = Some(format!("{error:#}")),
+        }
+    }
+
     fn choose(&mut self, index: usize) {
         if self.pending.is_some() {
             return;
@@ -478,11 +515,31 @@ impl eframe::App for CommandPicker {
         if ui.input(|input| input.key_pressed(egui::Key::Escape)) {
             std::process::exit(0);
         }
+        if let Some(editor) = self.editor.as_mut() {
+            match editor.ui(ui) {
+                EditorEvent::Stay => {}
+                EditorEvent::Exit => std::process::exit(0),
+                EditorEvent::Done => {
+                    let editor = self.editor.take().unwrap();
+                    self.config = editor.config;
+                    self.typed.clear();
+                    self.error = None;
+                    let height = (118.0 + ROW_HEIGHT * self.config.choices("").len().min(8) as f32)
+                        .clamp(185.0, 460.0);
+                    Self::resize(ui.ctx(), 560, height.round() as i32);
+                }
+            }
+            return;
+        }
         egui::Frame::NONE
             .inner_margin(egui::Margin::symmetric(18, 10))
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
                     ui.heading("Trievium / Commands");
+                    if ui.button("Edit").clicked() {
+                        self.open_editor(ui.ctx());
+                        return;
+                    }
                     ui.add_enabled_ui(self.pending.is_none(), |ui| {
                         let field = ui.add(
                             egui::TextEdit::singleline(&mut self.typed)

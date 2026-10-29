@@ -95,6 +95,52 @@ that focus before invoking the dispatcher. Workspace focus dispatchers use `focu
 Commands run on worker threads, not on the egui render path. Errors leave
 the HUD visible for correction, rather than pretending success.
 
+
+## Local Hyprland QA before acceptance
+
+Do not merge or publish this feature until it has been exercised in a real
+Hyprland 0.55+ session. In a checkout of `feature/command-tree`, build with:
+
+```sh
+git pull --ff-only
+cargo build --release --locked
+./target/release/trievium commands edit
+./target/release/trievium commands validate
+./target/release/trievium commands
+```
+
+Opening `commands edit` on a fresh installation initializes *only*
+`commands.json`; the original clipboard library is left untouched.
+The editor's filesystem reads, validation, and saves run outside egui's
+UI thread. Changes saved with **Done** are immediately available in the HUD.
+
+Before binding the launcher to `Super+Space`, check that the key combination
+is not already claimed. Then test these cases with harmless commands:
+
+1. **Initial state:** no config -> editor opens empty without touching
+   `items.json`. Invalid command JSON should produce an error, not reset data.
+2. **Nested prefixes:** `w` then `a` must only navigate, while `w a t`
+   may launch an explicitly configured action. Invalid keys are ignored;
+   Backspace removes a prefix; Escape cancels without side effects.
+3. **Focus-sensitive action:** from a regular tiled window, use a reversible
+   command such as fullscreen. Verify it affects that original window, **not**
+   the Trievium HUD, and does not tile or rearrange other windows.
+4. **Global action:** explicitly set `focus_original: false` on a workspace
+   switch (for example, workspace 6). Verify the target workspace activates
+   and the HUD exits without stealing focus back.
+5. **Editor round trip:** add/edit/reorder/delete a command or group, save,
+   return to the picker, and verify the new structure. While the editor is
+   open, modify the file from another process and confirm Save refuses to
+   overwrite the external change.
+6. **Regression:** launch the *original* `trievium` copy HUD, select a
+   snippet, paste it, and verify it is unchanged. Confirm
+   `trievium manage` still edits the old library.
+
+GitHub Actions exercises the native command HUD and editor under headless
+Sway, including exact selections, keyboard input, first-run initialization,
+and clipboard isolation. This does **not** establish the above Hyprland
+window-management behavior; only a real target-session QA run can do so.
+
 ## Acceptance and remaining work
 
 This is a first implementation slice, **not** a completed command-mode

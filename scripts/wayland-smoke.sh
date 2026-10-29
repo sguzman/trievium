@@ -464,9 +464,11 @@ swaymsg -s "$sway_sock" '[app_id="trievium"] focus' > /dev/null
 sleep 0.3
 # Fixed-layout editor header in this dedicated output: Save then Done.
 swaymsg -s "$sway_sock" 'seat seat0 cursor set 250 15' > /dev/null
-swaymsg -s "$sway_sock" 'seat seat0 cursor press button1' > /dev/null
-sleep 0.08
-swaymsg -s "$sway_sock" 'seat seat0 cursor release button1' > /dev/null
+# Use the compositor's virtual-pointer protocol rather than Sway's
+# deprecated seat press/release injection (which may not deliver a Wayland
+# pointer event when the only physical device is a virtual keyboard).
+wlrctl pointer move 1 1
+wlrctl pointer click left
 sleep 0.5
 wtype w
 wtype f

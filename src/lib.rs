@@ -1,7 +1,7 @@
 pub mod appearance;
 pub mod clipboard;
-pub mod command_editor;
 pub mod colors;
+pub mod command_editor;
 pub mod commands;
 pub mod config;
 pub mod hyprland;

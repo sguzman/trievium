@@ -597,7 +597,7 @@ mod tests {
             frame(editor, vec![pointer(false)], *time);
             *time += 0.1;
         };
-        click(&mut editor, 190.0, &ctx, &mut timestamp);
+        click(&mut editor, 172.0, &ctx, &mut timestamp);
         assert_eq!(
             editor.config.commands[0].sequence, "w f",
             "native Up did not move the selected command"
@@ -618,7 +618,7 @@ mod tests {
             "w f"
         );
 
-        click(&mut editor, 240.0, &ctx, &mut timestamp);
+        click(&mut editor, 220.0, &ctx, &mut timestamp);
         assert_eq!(
             editor.config.commands[1].sequence, "w f",
             "native Down did not move the selected command"

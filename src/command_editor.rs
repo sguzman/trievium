@@ -15,6 +15,7 @@ pub enum EditorEvent {
 }
 
 type PendingSave = Arc<Mutex<Option<Result<Vec<u8>>>>>;
+type PendingReload = Arc<Mutex<Option<Result<(Vec<u8>, CommandConfig)>>>>;
 
 pub struct CommandEditor {
     path: PathBuf,
@@ -24,6 +25,7 @@ pub struct CommandEditor {
     error: Option<String>,
     dirty: bool,
     pending: Option<PendingSave>,
+    pending_reload: Option<PendingReload>,
     finish_after_save: bool,
     done_ready: bool,
 }
@@ -103,13 +105,14 @@ impl CommandEditor {
             error: None,
             dirty: false,
             pending: None,
+            pending_reload: None,
             finish_after_save: false,
             done_ready: false,
         })
     }
 
     fn begin_save(&mut self, finish: bool) {
-        if self.pending.is_some() {
+        if self.pending.is_some() || self.pending_reload.is_some() {
             return;
         }
         // Validation and filesystem work happen inside write_atomic on
@@ -157,8 +160,47 @@ impl CommandEditor {
         }
     }
 
+    fn begin_reload(&mut self) {
+        if self.pending.is_some() || self.pending_reload.is_some() {
+            return;
+        }
+        let result: PendingReload = Arc::new(Mutex::new(None));
+        let sender = Arc::clone(&result);
+        let path = self.path.clone();
+        self.pending_reload = Some(result);
+        std::thread::spawn(move || {
+            let snapshot = read_snapshot(&path);
+            if let Ok(mut slot) = sender.lock() {
+                *slot = Some(snapshot);
+            }
+        });
+    }
+
+    fn poll_reload(&mut self, ctx: &egui::Context) {
+        if let Some(pending) = &self.pending_reload {
+            let finished = pending.lock().ok().and_then(|mut state| state.take());
+            if let Some(result) = finished {
+                self.pending_reload = None;
+                match result {
+                    Ok((bytes, config)) => {
+                        self.original = bytes;
+                        self.config = config;
+                        self.selected = None;
+                        self.error = None;
+                        self.dirty = false;
+                        self.done_ready = false;
+                    }
+                    Err(error) => self.error = Some(format!("{error:#}")),
+                }
+            } else {
+                ctx.request_repaint_after(Duration::from_millis(20));
+            }
+        }
+    }
+
     pub fn ui(&mut self, ui: &mut egui::Ui) -> EditorEvent {
         self.poll_save(ui.ctx());
+        self.poll_reload(ui.ctx());
         if self.done_ready {
             return EditorEvent::Done;
         }
@@ -166,17 +208,18 @@ impl CommandEditor {
         let mut save = false;
         let mut discard = false;
         let mut close = false;
+        let can_modify = self.pending.is_none() && self.pending_reload.is_none();
         ui.horizontal(|ui| {
             ui.heading("Edit command tree");
             ui.separator();
             save = ui
-                .add_enabled(self.pending.is_none(), egui::Button::new("Save"))
+                .add_enabled(can_modify, egui::Button::new("Save"))
                 .clicked();
             finish = ui
-                .add_enabled(self.pending.is_none(), egui::Button::new("Done"))
+                .add_enabled(can_modify, egui::Button::new("Done"))
                 .clicked();
             discard = ui
-                .add_enabled(self.pending.is_none(), egui::Button::new("Discard"))
+                .add_enabled(can_modify, egui::Button::new("Discard"))
                 .clicked();
             close = ui.button("Close").clicked();
         });
@@ -184,22 +227,19 @@ impl CommandEditor {
             return EditorEvent::Exit;
         }
         if discard {
-            match read_snapshot(&self.path) {
-                Ok((bytes, config)) => {
-                    self.original = bytes;
-                    self.config = config;
-                    self.selected = None;
-                    self.error = None;
-                    self.dirty = false;
-                }
-                Err(error) => self.error = Some(format!("{error:#}")),
-            }
+            // A slow filesystem or large JSON registry must not block egui.
+            self.begin_reload();
+            return EditorEvent::Stay;
         }
         if let Some(error) = &self.error {
             ui.colored_label(egui::Color32::RED, error);
         }
         if self.pending.is_some() {
             ui.label("Saving commands…");
+            return EditorEvent::Stay;
+        }
+        if self.pending_reload.is_some() {
+            ui.label("Reloading command registry…");
             return EditorEvent::Stay;
         }
         if save || finish {

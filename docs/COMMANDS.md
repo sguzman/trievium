@@ -111,8 +111,16 @@ cargo build --release --locked
 
 Opening `commands edit` on a fresh installation initializes *only*
 `commands.json`; the original clipboard library is left untouched.
-The editor's filesystem reads, validation, and saves run outside egui's
-UI thread. Changes saved with **Done** are immediately available in the HUD.
+The editor's filesystem reads, validation, saves and Discard reloads run
+outside egui's UI thread. Changes saved with **Done** are immediately
+available in the HUD.
+
+**Symlink-safe saves:** If `commands.json` is a symlink to a file in a
+managed dotfiles/configuration repository, atomic saves update that resolved
+target without replacing the symlink. Retargeting the link while the editor
+is open is detected and Save is refused. Save, Close and Escape cannot
+interrupt an active save/reload; closing with unsaved edits requires
+explicit discard confirmation.
 
 Before binding the launcher to `Super+Space`, check that the key combination
 is not already claimed. Then test these cases with harmless commands:

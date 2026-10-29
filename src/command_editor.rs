@@ -161,6 +161,13 @@ impl CommandEditor {
         };
     }
 
+    fn move_group(&mut self, from: usize, to: usize) {
+        if from < self.config.groups.len() && to < self.config.groups.len() && from != to {
+            self.config.groups.swap(from, to);
+            self.dirty = true;
+        }
+    }
+
     pub fn new(path: PathBuf) -> Result<Self> {
         let (target, original, config) = read_snapshot(&path)?;
         Ok(Self {
@@ -503,6 +510,8 @@ impl CommandEditor {
         });
         ui.label("Optional labels for a command-prefix branch, such as w = Windows.");
         let mut remove_group = None;
+        let mut move_group = None;
+        let group_count = self.config.groups.len();
         egui::ScrollArea::vertical()
             .id_salt("command-groups")
             .max_height(160.0)
@@ -517,13 +526,30 @@ impl CommandEditor {
                             .add(egui::TextEdit::singleline(&mut group.prefix).desired_width(75.0))
                             .changed();
                         ui.label("Label");
-                        self.dirty |= ui.text_edit_singleline(&mut group.label).changed();
+                        self.dirty |= ui
+                            .add(egui::TextEdit::singleline(&mut group.label).desired_width(210.0))
+                            .changed();
+                        if ui
+                            .add_enabled(index > 0, egui::Button::new("Up"))
+                            .clicked()
+                        {
+                            move_group = Some((index, index - 1));
+                        }
+                        if ui
+                            .add_enabled(index + 1 < group_count, egui::Button::new("Down"))
+                            .clicked()
+                        {
+                            move_group = Some((index, index + 1));
+                        }
                         if ui.button("Remove").clicked() {
                             remove_group = Some(index);
                         }
                     });
                 }
             });
+        if let Some((from, to)) = move_group {
+            self.move_group(from, to);
+        }
         if let Some(index) = remove_group {
             self.config.groups.remove(index);
             self.dirty = true;
@@ -535,6 +561,67 @@ impl CommandEditor {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn group_reorder_is_bounded_and_persists_without_touching_copy_library() {
+        let dir = std::env::temp_dir().join(format!(
+            "trievium-command-group-reorder-test-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("commands.json");
+        let copy_path = dir.join("items.json");
+        fs::write(&copy_path, b"original clipboard data").unwrap();
+        let mut config = CommandConfig::empty();
+        for (prefix, label, sequence) in [
+            ("a", "Applications", "a t"),
+            ("w", "Windows", "w f"),
+        ] {
+            config.groups.push(Group {
+                prefix: prefix.into(),
+                label: label.into(),
+            });
+            config.commands.push(CommandEntry {
+                sequence: sequence.into(),
+                label: label.into(),
+                action: Action::Exec {
+                    program: "true".into(),
+                    args: Vec::new(),
+                },
+            });
+        }
+        fs::write(&path, serde_json::to_vec_pretty(&config).unwrap()).unwrap();
+        let mut editor = CommandEditor::new(path.clone()).unwrap();
+        editor.move_group(0, 0);
+        editor.move_group(0, 20);
+        assert!(!editor.dirty, "invalid moves should leave the editor clean");
+        editor.move_group(1, 0);
+        assert_eq!(editor.config.groups[0].prefix, "w");
+        assert!(editor.dirty);
+        editor.move_group(0, 1);
+        assert_eq!(editor.config.groups[0].prefix, "a");
+        editor.move_group(1, 0);
+        let ctx = egui::Context::default();
+        editor.begin_save(false);
+        for _ in 0..250 {
+            editor.poll_save(&ctx);
+            if !editor.busy() {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert!(!editor.busy());
+        assert!(!editor.dirty);
+        assert!(editor.error.is_none());
+        let persisted = CommandConfig::load(&path).unwrap();
+        assert_eq!(persisted.groups[0].prefix, "w");
+        assert_eq!(persisted.groups[1].prefix, "a");
+        assert_eq!(persisted.commands[0].sequence, "a t");
+        assert_eq!(persisted.commands[1].sequence, "w f");
+        assert_eq!(fs::read(&copy_path).unwrap(), b"original clipboard data");
+        fs::remove_dir_all(dir).unwrap();
+    }
 
     #[test]
     fn native_move_buttons_persist_reordering_in_both_directions() {

@@ -395,7 +395,7 @@ pub fn run(args: &[String]) -> Result<()> {
         ..Default::default()
     };
     hyprland::prepare_floating_popup().map_err(anyhow::Error::msg)?;
-    hyprland::focus_new_popup(width.round() as i32, height.round() as i32);
+    hyprland::focus_new_command_popup(width.round() as i32, height.round() as i32);
     let editor = if editing {
         Some(CommandEditor::new(path.clone())?)
     } else {

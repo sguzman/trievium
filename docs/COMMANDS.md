@@ -84,6 +84,11 @@ partial prefix is never automatically executed. Colliding and ancestor
 sequences are rejected; groups are display labels for prefix branches.
 Escape cancels, Backspace edits, and clicking a HUD branch advances it.
 
+**Trust boundary:** `commands.json` is executable configuration. Do not import
+command registries or Lua expressions from untrusted sources. Validation
+checks sequence collisions and required action fields; it is not a Lua
+sandbox.
+
 Execution uses direct argv-based process spawning (never `sh -c`). Hyprland
 commands are dispatched through `hyprctl dispatch` using Hyprland 0.55+ Lua
 expressions (`hl.dsp.*`). The `expression` field must be a valid dispatcher

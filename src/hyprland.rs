@@ -41,14 +41,25 @@ pub fn prepare_floating_popup() -> Result<(), String> {
 }
 
 pub fn focus_new_popup(width: i32, height: i32) {
+    start_popup_focus(width, height, true);
+}
+
+/// Command actions can refocus their originating window immediately after
+/// selection. Never schedule a later popup focus retry that might steal focus
+/// back just before a focus-dependent dispatcher executes.
+pub fn focus_new_command_popup(width: i32, height: i32) {
+    start_popup_focus(width, height, false);
+}
+
+fn start_popup_focus(width: i32, height: i32, delayed_correction: bool) {
     if std::env::var_os("HYPRLAND_INSTANCE_SIGNATURE").is_none_or(|s| s.is_empty()) {
         return;
     }
     let pid = std::process::id();
-    thread::spawn(move || focus_when_mapped(pid, width, height));
+    thread::spawn(move || focus_when_mapped(pid, width, height, delayed_correction));
 }
 
-fn focus_when_mapped(pid: u32, width: i32, height: i32) {
+fn focus_when_mapped(pid: u32, width: i32, height: i32, delayed_correction: bool) {
     for _ in 0..RETRIES {
         if let Some((address, floating)) = our_window_address(pid) {
             if !floating {
@@ -61,9 +72,11 @@ fn focus_when_mapped(pid: u32, width: i32, height: i32) {
                 eprintln!("trievium: could not configure Hyprland popup: {error}");
                 return;
             }
-            // Initial focus may lag mapping slightly. Retry at most once,
-            // never continually reclaim the keyboard or warp the pointer.
-            if let Err(error) = confirm_popup_focus(&address) {
+            // Retain the existing clipboard picker's bounded correction,
+            // but never refocus the command HUD after actions may begin.
+            if delayed_correction
+                && let Err(error) = confirm_popup_focus(&address)
+            {
                 eprintln!("trievium: {error}");
             }
             return;

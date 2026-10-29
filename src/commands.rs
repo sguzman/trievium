@@ -45,7 +45,11 @@ pub struct CommandEntry {
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Action {
     /// Spawn a program directly, without a shell.
-    Exec { program: String, #[serde(default)] args: Vec<String> },
+    Exec {
+        program: String,
+        #[serde(default)]
+        args: Vec<String>,
+    },
     /// Use the Hyprland dispatcher. Explicitly refocus the original window
     /// before focus-dependent commands, never the command popup.
     Hyprland {
@@ -118,7 +122,9 @@ impl CommandConfig {
                     dispatcher, args, ..
                 } => {
                     if dispatcher.is_empty()
-                        || !dispatcher.bytes().all(|ch| ch.is_ascii_alphanumeric() || ch == b'_')
+                        || !dispatcher
+                            .bytes()
+                            .all(|ch| ch.is_ascii_alphanumeric() || ch == b'_')
                         || args.chars().any(|ch| matches!(ch, '\n' | '\r' | '\0'))
                     {
                         bail!("Invalid Hyprland dispatcher or arguments for {key}");
@@ -153,15 +159,14 @@ impl CommandConfig {
 
     fn matched(&self, prefix: &str) -> bool {
         self.commands.iter().any(|entry| {
-            normalized(&entry.sequence)
-                .is_ok_and(|sequence| sequence.starts_with(prefix))
+            normalized(&entry.sequence).is_ok_and(|sequence| sequence.starts_with(prefix))
         })
     }
 
     fn completed(&self, prefix: &str) -> Option<usize> {
-        self.commands.iter().position(|entry| {
-            normalized(&entry.sequence).is_ok_and(|sequence| sequence == prefix)
-        })
+        self.commands
+            .iter()
+            .position(|entry| normalized(&entry.sequence).is_ok_and(|sequence| sequence == prefix))
     }
 
     /// A command executes only at its *full* configured sequence.
@@ -249,9 +254,9 @@ pub fn initialize_empty(path: &Path) -> Result<()> {
         use std::os::unix::fs::OpenOptionsExt;
         options.mode(0o600);
     }
-    let mut file = options.open(path).with_context(|| {
-        format!("Refusing to overwrite existing registry {}", path.display())
-    })?;
+    let mut file = options
+        .open(path)
+        .with_context(|| format!("Refusing to overwrite existing registry {}", path.display()))?;
     use std::io::Write;
     file.write_all(serde_json::to_string_pretty(&CommandConfig::empty())?.as_bytes())?;
     file.write_all(b"\n")?;
@@ -263,9 +268,10 @@ pub fn initialize_empty(path: &Path) -> Result<()> {
 fn execute(action: &Action, original: Option<&str>) -> Result<()> {
     match action {
         Action::Exec { program, args } => {
-            Command::new(program).args(args).spawn().with_context(|| {
-                format!("Launching {program}")
-            })?;
+            Command::new(program)
+                .args(args)
+                .spawn()
+                .with_context(|| format!("Launching {program}"))?;
         }
         Action::Hyprland {
             dispatcher,
@@ -285,7 +291,8 @@ fn execute(action: &Action, original: Option<&str>) -> Result<()> {
                 .args(["dispatch", dispatcher, args])
                 .output()
                 .with_context(|| format!("Running Hyprland dispatcher {dispatcher}"))?;
-            if !output.status.success() || !String::from_utf8_lossy(&output.stdout).trim().eq("ok") {
+            if !output.status.success() || !String::from_utf8_lossy(&output.stdout).trim().eq("ok")
+            {
                 bail!(
                     "Hyprland rejected {dispatcher}: {} {}",
                     String::from_utf8_lossy(&output.stdout).trim(),
@@ -313,7 +320,10 @@ pub fn run(args: &[String]) -> Result<()> {
             }
             "--theme" | "--color-mode" => {
                 index += 1;
-                appearance = args.get(index).context("--theme requires a value")?.parse()?;
+                appearance = args
+                    .get(index)
+                    .context("--theme requires a value")?
+                    .parse()?;
             }
             "pick" => operation = "pick",
             other => bail!("Unknown commands argument '{other}'"),
@@ -339,7 +349,10 @@ pub fn run(args: &[String]) -> Result<()> {
     }
     let config = CommandConfig::load(&path)?;
     if operation == "validate" {
-        println!("Valid command registry ({} commands)", config.commands.len());
+        println!(
+            "Valid command registry ({} commands)",
+            config.commands.len()
+        );
         return Ok(());
     }
     let _guard = match crate::launch::acquire()? {
@@ -350,8 +363,7 @@ pub fn run(args: &[String]) -> Result<()> {
         value => value,
     };
     let original_window = hyprland::focused_window_before_popup();
-    let height = (118.0 + ROW_HEIGHT * config.choices("").len().min(8) as f32)
-        .clamp(185.0, 460.0);
+    let height = (118.0 + ROW_HEIGHT * config.choices("").len().min(8) as f32).clamp(185.0, 460.0);
     let native = eframe::NativeOptions {
         renderer: eframe::Renderer::Glow,
         system_font_fallback: false,
@@ -430,7 +442,9 @@ impl CommandPicker {
 impl eframe::App for CommandPicker {
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         if !self.font_load_started
-            && self.font_load_after.is_some_and(|when| std::time::Instant::now() >= when)
+            && self
+                .font_load_after
+                .is_some_and(|when| std::time::Instant::now() >= when)
         {
             self.font_load_started = true;
             self.font_load_after = None;
@@ -459,7 +473,8 @@ impl eframe::App for CommandPicker {
             ui.ctx().request_repaint_after(Duration::from_millis(50));
         }
         let theme = ui.ctx().theme();
-        ui.painter().rect_filled(ui.max_rect(), 0.0, Appearance::background(theme));
+        ui.painter()
+            .rect_filled(ui.max_rect(), 0.0, Appearance::background(theme));
         if ui.input(|input| input.key_pressed(egui::Key::Escape)) {
             std::process::exit(0);
         }
@@ -505,12 +520,16 @@ impl eframe::App for CommandPicker {
                                 let button = ui.add_sized(
                                     [45.0, 28.0],
                                     egui::Button::new(
-                                        egui::RichText::new(choice.key.to_ascii_lowercase().to_string())
-                                            .monospace()
-                                            .strong(),
+                                        egui::RichText::new(
+                                            choice.key.to_ascii_lowercase().to_string(),
+                                        )
+                                        .monospace()
+                                        .strong(),
                                     ),
                                 );
-                                if button.clicked() || ui.selectable_label(false, &choice.label).clicked() {
+                                if button.clicked()
+                                    || ui.selectable_label(false, &choice.label).clicked()
+                                {
                                     clicked = Some((choice.key, choice.terminal));
                                 }
                             });
@@ -534,7 +553,10 @@ mod tests {
     fn demo() -> CommandConfig {
         CommandConfig {
             version: 1,
-            groups: vec![Group { prefix: "w".into(), label: "Windows".into() }],
+            groups: vec![Group {
+                prefix: "w".into(),
+                label: "Windows".into(),
+            }],
             commands: vec![
                 CommandEntry {
                     sequence: "w f".into(),
@@ -557,7 +579,10 @@ mod tests {
                 CommandEntry {
                     sequence: "a t".into(),
                     label: "Terminal".into(),
-                    action: Action::Exec { program: "kitty".into(), args: Vec::new() },
+                    action: Action::Exec {
+                        program: "kitty".into(),
+                        args: Vec::new(),
+                    },
                 },
             ],
         }
@@ -594,20 +619,30 @@ mod tests {
         config.commands.push(CommandEntry {
             sequence: "w".into(),
             label: "Ambiguous ancestor".into(),
-            action: Action::Exec { program: "true".into(), args: Vec::new() },
+            action: Action::Exec {
+                program: "true".into(),
+                args: Vec::new(),
+            },
         });
         assert!(config.validate().is_err());
     }
 
     #[test]
     fn command_file_never_requires_or_mutates_items_json() {
-        let dir = std::env::temp_dir().join(format!("trievium-command-test-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("trievium-command-test-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         let original = b"private clipboard library".to_vec();
         fs::write(dir.join("items.json"), &original).unwrap();
         initialize_empty(&dir.join("commands.json")).unwrap();
-        assert_eq!(CommandConfig::load(&dir.join("commands.json")).unwrap().commands.len(), 0);
+        assert_eq!(
+            CommandConfig::load(&dir.join("commands.json"))
+                .unwrap()
+                .commands
+                .len(),
+            0
+        );
         assert!(initialize_empty(&dir.join("commands.json")).is_err());
         assert_eq!(fs::read(dir.join("items.json")).unwrap(), original);
         fs::remove_dir_all(dir).unwrap();

@@ -14,6 +14,8 @@ pub enum EditorEvent {
     Exit,
 }
 
+type PendingSave = Arc<Mutex<Option<Result<Vec<u8>>>>>;
+
 pub struct CommandEditor {
     path: PathBuf,
     original: Vec<u8>,
@@ -21,7 +23,7 @@ pub struct CommandEditor {
     selected: Option<usize>,
     error: Option<String>,
     dirty: bool,
-    pending: Option<Arc<Mutex<Option<Result<Vec<u8>>>>>>,
+    pending: Option<PendingSave>,
     finish_after_save: bool,
     done_ready: bool,
 }
@@ -72,10 +74,8 @@ fn write_atomic(path: &Path, config: &CommandConfig, expected: &[u8]) -> Result<
         }
         bail!("Unable to reserve a temporary file for command registry")
     })();
-    if result.is_err() {
-        if let Some(path) = temp_path {
-            let _ = fs::remove_file(path);
-        }
+    if result.is_err() && let Some(path) = temp_path {
+        let _ = fs::remove_file(path);
     }
     result?;
     Ok(next)
@@ -249,8 +249,9 @@ impl CommandEditor {
                     }
                 }
             });
-        if let Some(index) = self.selected {
-            if let Some(entry) = self.config.commands.get_mut(index) {
+        if let Some(index) = self.selected
+            && let Some(entry) = self.config.commands.get_mut(index)
+        {
                 ui.separator();
                 ui.horizontal(|ui| {
                     ui.label("Sequence");
@@ -315,7 +316,6 @@ impl CommandEditor {
                             .changed();
                     }
                 }
-            }
         }
 
         ui.separator();

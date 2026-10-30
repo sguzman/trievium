@@ -395,18 +395,7 @@ fn execute(action: &Action, original: Option<&str>) -> Result<()> {
                 )?;
                 hyprland::restore_original_focus(address).map_err(anyhow::Error::msg)?;
             }
-            let output = Command::new("hyprctl")
-                .args(["dispatch", expression])
-                .output()
-                .with_context(|| format!("Running Hyprland Lua dispatcher {expression}"))?;
-            if !output.status.success() || !String::from_utf8_lossy(&output.stdout).trim().eq("ok")
-            {
-                bail!(
-                    "Hyprland rejected {expression}: {} {}",
-                    String::from_utf8_lossy(&output.stdout).trim(),
-                    String::from_utf8_lossy(&output.stderr).trim()
-                );
-            }
+            hyprland::dispatch_lua(expression).map_err(anyhow::Error::msg)?;
         }
     }
     Ok(())

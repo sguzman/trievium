@@ -1055,7 +1055,7 @@ mod tests {
             "wf",
         ));
         assert!(has_transformed_text_input(
-            &[egui::Event::Ime(egui::ImeEvent::Commit("wf\\n".into()))],
+            &[egui::Event::Ime(egui::ImeEvent::Commit("wf\n".into()))],
             "wf",
         ));
         let valid = "a b c d e f g h i j k  l";

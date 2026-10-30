@@ -930,6 +930,53 @@ mod tests {
     }
 
     #[test]
+    fn native_egui_paste_event_obeys_exact_command_matching() {
+        let config = demo();
+        config.validate().unwrap();
+        let index = CommandIndex::compile(&config);
+        let ctx = egui::Context::default();
+        let mut typed = String::new();
+        let mut paint = |events: Vec<egui::Event>, time: f64| {
+            ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(700.0, 400.0),
+                    )),
+                    time: Some(time),
+                    events,
+                    ..Default::default()
+                },
+                |ui| {
+                    let field = ui.add(
+                        egui::TextEdit::singleline(&mut typed)
+                            .desired_width(135.0)
+                            .char_limit(MAX_SEQUENCE),
+                    );
+                    if !field.has_focus() {
+                        field.request_focus();
+                    }
+                },
+            )
+            .drop_without_applying_deltas();
+        };
+
+        // This injects an egui Paste event after focus is established; it does
+        // not claim to test the OS clipboard/Wayland backend.
+        paint(Vec::new(), 0.0);
+        paint(vec![egui::Event::Paste("zwf".into())], 0.1);
+        assert_eq!(typed, "zwf", "egui did not deliver the paste event");
+        assert_eq!(index.resolve(&typed), Resolution::Continue(String::new()));
+
+        // Once the invalid input is cleared, a valid paste still resolves.
+        typed.clear();
+        paint(Vec::new(), 0.2);
+        paint(vec![egui::Event::Paste("wf".into())], 0.3);
+        assert_eq!(typed, "wf", "egui did not deliver the valid paste");
+        assert_eq!(index.resolve(&typed), Resolution::Selected(0));
+    }
+
+    #[test]
     fn ordinary_invalid_key_is_ignored_between_incremental_shortcut_keys() {
         let config = demo();
         config.validate().unwrap();

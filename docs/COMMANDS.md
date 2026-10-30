@@ -87,6 +87,11 @@ sequences are rejected; groups are display labels for prefix branches.
 Pasted input must match a full sequence (apart from spaces between keys).
 Extra characters before, within or after a shortcut (such as `zwf`, `wzf`
 or `wf extra`) cannot execute the shorter command; invalid input is cleared.
+The HUD reserves an overflow character beyond its longest accepted shortcut,
+so a long paste cannot be truncated into an executable shortcut. Pasted
+punctuation, non-ASCII characters and control characters (including line
+breaks) are rejected from the raw input event rather than relying on a
+single-line text field to preserve them.
 Normal key-by-key entry still ignores an invalid key and preserves the prefix.
 Escape cancels, Backspace edits, and clicking a HUD branch advances it.
 

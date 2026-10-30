@@ -108,18 +108,31 @@ pub fn focus_new_command_popup(width: i32, height: i32) -> CommandPopupFocus {
     focus
 }
 
+/// Always reject an unexpected tiled mapping, even when an early command
+/// has already disabled the optional startup focus/geometry setup. Checking
+/// action_started first would silently leave the HUD tiled in that case.
+fn command_popup_may_configure(floating: bool, action_started: bool) -> Result<bool, &'static str> {
+    if !floating {
+        Err("command HUD mapped tiled despite the pre-map rule; closing")
+    } else {
+        Ok(!action_started)
+    }
+}
+
 fn focus_command_when_mapped(pid: u32, width: i32, height: i32, focus: CommandPopupFocus) {
     for _ in 0..RETRIES {
         if let Some((address, floating)) = our_window_address(pid) {
             focus.run_action(|| {
-                if focus.action_started.load(Ordering::SeqCst) {
-                    return;
-                }
-                if !floating {
-                    eprintln!(
-                        "trievium: command HUD mapped tiled despite the pre-map rule; closing"
-                    );
-                    std::process::exit(1);
+                match command_popup_may_configure(
+                    floating,
+                    focus.action_started.load(Ordering::SeqCst),
+                ) {
+                    Err(error) => {
+                        eprintln!("trievium: {error}");
+                        std::process::exit(1);
+                    }
+                    Ok(false) => return,
+                    Ok(true) => {}
                 }
                 if let Err(error) = configure_our_window(&address, width, height) {
                     eprintln!("trievium: cannot configure command HUD: {error}");
@@ -479,6 +492,17 @@ mod tests {
         assert!(
             focus.action_started.load(Ordering::SeqCst),
             "the initial focus worker must stay disarmed after a failed action"
+        );
+    }
+
+    #[test]
+    fn early_command_does_not_skip_tiled_map_safety_check() {
+        assert_eq!(command_popup_may_configure(true, false), Ok(true));
+        assert_eq!(command_popup_may_configure(true, true), Ok(false));
+        assert!(command_popup_may_configure(false, false).is_err());
+        assert!(
+            command_popup_may_configure(false, true).is_err(),
+            "early action must never hide an unexpectedly tiled command HUD"
         );
     }
 

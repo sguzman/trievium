@@ -84,8 +84,10 @@ just for readability. `w f` means press `w`, then `f`, **not**
 configured sequence has been entered. Unlike the copy picker, a unique
 partial prefix is never automatically executed. Colliding and ancestor
 sequences are rejected; groups are display labels for prefix branches.
-Pasting additional text after a complete sequence (for example, `wf extra`)
-does not execute the shorter command; the invalid paste is cleared.
+Pasted input must match a full sequence (apart from spaces between keys).
+Extra characters before, within or after a shortcut (such as `zwf`, `wzf`
+or `wf extra`) cannot execute the shorter command; invalid input is cleared.
+Normal key-by-key entry still ignores an invalid key and preserves the prefix.
 Escape cancels, Backspace edits, and clicking a HUD branch advances it.
 
 **Trust boundary:** `commands.json` is executable configuration. Do not import

@@ -40,6 +40,13 @@ jobs:
           ./target/debug/trievium commands -V | grep -F 'trievium '
           test ! -e "$commands"
           test ! -e "$config"
+          # Conflicting subcommands must fail before any registry is created.
+          if ./target/debug/trievium commands validate --config "$commands" init; then
+            echo "conflicting command operations unexpectedly accepted" >&2
+            exit 1
+          fi
+          test ! -e "$commands"
+          test ! -e "$config"
           ./target/debug/trievium commands init --config "$commands"
           ./target/debug/trievium commands validate --config "$commands"
           ./target/debug/trievium commands config-path --config "$commands" | grep -Fx "$commands"

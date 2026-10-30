@@ -69,11 +69,21 @@ impl CommandPopupFocus {
         action()
     }
 
-    pub fn recover_after_error(&self) {
+    pub fn recover_after_error(&self, original: Option<&str>) {
         self.run_action(|| {
             if std::env::var_os("HYPRLAND_INSTANCE_SIGNATURE").is_some_and(|s| !s.is_empty())
                 && let Some(address) = our_floating_window_address(std::process::id())
+                && Command::new("hyprctl")
+                    .args(["-j", "activewindow"])
+                    .output()
+                    .is_ok_and(|output| {
+                        output.status.success()
+                            && recovery_may_refocus(original, &output.stdout)
+                    })
             {
+                // Restore the HUD only if the failed action left the original
+                // window active. If the user selected something else while
+                // the command ran, never take focus back from that window.
                 let expression = format!("hl.dsp.focus({{ window = \"address:{address}\" }})");
                 if let Err(error) = dispatch_lua(&expression) {
                     eprintln!("trievium: could not restore command HUD focus: {error}");
@@ -242,6 +252,17 @@ fn active_window_address(bytes: &[u8]) -> Option<String> {
     let value: Value = serde_json::from_slice(bytes).ok()?;
     let address = value.get("address")?.as_str()?;
     valid_address(address).then(|| address.to_owned())
+}
+
+/// After a failed launch, only the original foreground window may hand
+/// focus back to the HUD. Never interrupt an unrelated window the user
+/// focused while the asynchronous action was running. Fail closed when
+/// compositor identity is missing or malformed.
+fn recovery_may_refocus(original: Option<&str>, active_json: &[u8]) -> bool {
+    let Some(original) = original.filter(|address| valid_address(address)) else {
+        return false;
+    };
+    active_window_address(active_json).as_deref() == Some(original)
 }
 
 fn is_active_window(address: &str) -> bool {
@@ -530,6 +551,32 @@ mod tests {
             assert!(!valid_address(address));
         }
         assert!(valid_address("0x1a2BF0"));
+    }
+
+    #[test]
+    fn failed_action_recovery_only_refocuses_from_original_window() {
+        assert!(recovery_may_refocus(
+            Some("0x100"),
+            br#"{"address":"0x100","class":"kitty"}"#
+        ));
+        assert!(!recovery_may_refocus(
+            Some("0x100"),
+            br#"{"address":"0x200","class":"firefox"}"#
+        ));
+        assert!(!recovery_may_refocus(
+            Some("0x100"),
+            br#"{"address":"0x300","class":"trievium"}"#
+        ));
+        assert!(!recovery_may_refocus(
+            Some("0x100"),
+            br#"{"address":"invalid"}"#
+        ));
+        assert!(!recovery_may_refocus(Some("0x100"), b"invalid json"));
+        assert!(!recovery_may_refocus(None, br#"{"address":"0x100"}"#));
+        assert!(!recovery_may_refocus(
+            Some("invalid"),
+            br#"{"address":"0x100"}"#
+        ));
     }
 
     #[test]

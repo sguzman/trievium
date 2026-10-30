@@ -644,7 +644,7 @@ impl CommandPicker {
             // All compositor/process calls remain off egui's UI thread.
             let outcome = focus.run_action(|| execute(&action, original.as_deref()));
             if outcome.is_err() {
-                focus.recover_after_error();
+                focus.recover_after_error(original.as_deref());
             }
             if let Ok(mut slot) = sender.lock() {
                 *slot = Some(outcome);

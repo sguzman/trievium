@@ -188,9 +188,8 @@ is not already claimed. Then test these cases with harmless commands:
    closing or remaining busy. Without relaunching the HUD, type a working
    shortcut and confirm it runs and the HUD closes. The headless Wayland
    regression covers the recovery path; the actual error display still needs
-   When testing a delayed failure, verify the HUD does not steal focus
-   from another window that the user focused during the action.
-   desktop confirmation.
+   desktop confirmation. For a delayed failure, also verify that the HUD
+   does not steal focus from another window selected during the action.
 7. **Regression:** launch the *original* `trievium` copy HUD, select a
    snippet, paste it, and verify it is unchanged. Confirm
    `trievium manage` still edits the old library.

@@ -663,44 +663,55 @@ impl CommandEditor {
         egui::ScrollArea::vertical()
             .id_salt("command-groups")
             .max_height(190.0)
-            .show_rows(ui, 48.0, self.config.groups.len(), |ui, rows| {
+            .show_rows(ui, 112.0, self.config.groups.len(), |ui, rows| {
                 ui.spacing_mut().item_spacing.y = 0.0;
                 for index in rows {
                     let group = &mut self.config.groups[index];
-                    ui.horizontal(|ui| {
-                        ui.set_min_height(46.0);
-                        ui.label("Prefix");
-                        Manager::input_frame(ui, |ui| {
-                            self.dirty |= ui
-                                .add(
+                    // Keep both inputs inside their own columns. The previous
+                    // one-line row overflowed a minimum-width editor window.
+                    ui.vertical(|ui| {
+                        ui.set_min_height(112.0);
+                        ui.columns(2, |cols| {
+                            cols[0].label("Prefix");
+                            Manager::input_frame(&mut cols[0], |ui| {
+                                let response = ui.add(
                                     egui::TextEdit::singleline(&mut group.prefix)
                                         .frame(egui::Frame::NONE)
-                                        .desired_width(75.0),
-                                )
-                                .changed();
-                        });
-                        ui.label("Name");
-                        Manager::input_frame(ui, |ui| {
-                            self.dirty |= ui
-                                .add(
+                                        .desired_width(ui.available_width()),
+                                );
+                                #[cfg(test)]
+                                self.test_hitboxes.insert("group_prefix", response.rect);
+                                self.dirty |= response.changed();
+                            });
+                            cols[1].label("Name");
+                            Manager::input_frame(&mut cols[1], |ui| {
+                                let response = ui.add(
                                     egui::TextEdit::singleline(&mut group.label)
                                         .frame(egui::Frame::NONE)
-                                        .desired_width(210.0),
-                                )
-                                .changed();
+                                        .desired_width(ui.available_width()),
+                                );
+                                #[cfg(test)]
+                                self.test_hitboxes.insert("group_name", response.rect);
+                                self.dirty |= response.changed();
+                            });
                         });
-                        if ui.add_enabled(index > 0, egui::Button::new("Up")).clicked() {
-                            move_group = Some((index, index - 1));
-                        }
-                        if ui
-                            .add_enabled(index + 1 < group_count, egui::Button::new("Down"))
-                            .clicked()
-                        {
-                            move_group = Some((index, index + 1));
-                        }
-                        if ui.button("Remove").clicked() {
-                            remove_group = Some(index);
-                        }
+                        ui.horizontal(|ui| {
+                            if ui.add_enabled(index > 0, egui::Button::new("Up")).clicked() {
+                                move_group = Some((index, index - 1));
+                            }
+                            if ui
+                                .add_enabled(index + 1 < group_count, egui::Button::new("Down"))
+                                .clicked()
+                            {
+                                move_group = Some((index, index + 1));
+                            }
+                            let remove = ui.button("Remove");
+                            #[cfg(test)]
+                            self.test_hitboxes.insert("group_remove", remove.rect);
+                            if remove.clicked() {
+                                remove_group = Some(index);
+                            }
+                        });
                     });
                 }
             });
@@ -718,6 +729,56 @@ impl CommandEditor {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn command_group_editor_controls_fit_minimum_window_width() {
+        let dir = std::env::temp_dir().join(format!(
+            "trievium-command-group-layout-test-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("commands.json");
+        let mut config = CommandConfig::empty();
+        config.commands.push(CommandEntry {
+            sequence: "a t".into(),
+            label: "Terminal".into(),
+            action: Action::Exec {
+                program: "true".into(),
+                args: Vec::new(),
+            },
+        });
+        config.groups.push(Group {
+            prefix: "a".into(),
+            label: "Applications".into(),
+        });
+        fs::write(&path, serde_json::to_vec_pretty(&config).unwrap()).unwrap();
+
+        let mut editor = CommandEditor::new(path).unwrap();
+        let ctx = egui::Context::default();
+        ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(400.0, 720.0),
+                )),
+                ..Default::default()
+            },
+            |ui| {
+                let _ = editor.ui(ui);
+            },
+        )
+        .drop_without_applying_deltas();
+
+        for control in ["group_prefix", "group_name", "group_remove"] {
+            let rect = editor.test_hitboxes.get(control).expect("group control should render");
+            assert!(
+                rect.min.x >= 0.0 && rect.max.x <= 400.0,
+                "{control} overflows minimum-width editor: {rect:?}"
+            );
+        }
+        fs::remove_dir_all(dir).unwrap();
+    }
 
     #[test]
     fn group_reorder_is_bounded_and_persists_without_touching_copy_library() {

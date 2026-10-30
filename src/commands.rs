@@ -668,6 +668,16 @@ impl CommandPicker {
     }
 }
 
+// Single-line TextEdit can transform pasted control characters. Inspect the
+// original paste event before accepting a resolved shortcut, so pasted tabs,
+// line breaks, punctuation and invisible Unicode never become valid commands.
+fn has_unsupported_paste(events: &[egui::Event]) -> bool {
+    events.iter().any(|event| {
+        matches!(event, egui::Event::Paste(text)
+            if !text.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b' '))
+    })
+}
+
 impl eframe::App for CommandPicker {
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         if let Some(pending) = &self.pending_compilation {
@@ -802,7 +812,15 @@ impl eframe::App for CommandPicker {
                             field.request_focus();
                         }
                         if field.changed() {
-                            self.accept(ui.ctx());
+                            if ui.input(|input| has_unsupported_paste(&input.events)) {
+                                self.typed.clear();
+                                self.refresh_choices();
+                                self.error = Some(
+                                    "Paste accepts only ASCII letters, digits and spaces".into(),
+                                );
+                            } else {
+                                self.accept(ui.ctx());
+                            }
                         }
                     });
                 });
@@ -971,6 +989,22 @@ mod tests {
         for (typed, selected) in [("wf", 0), ("w f", 0), ("wc", 1), ("at", 2)] {
             assert_eq!(config.resolve(typed), Resolution::Selected(selected));
             assert_eq!(index.resolve(typed), Resolution::Selected(selected));
+        }
+    }
+
+    #[test]
+    fn pasted_control_characters_cannot_be_sanitized_into_a_command() {
+        for pasted in ["w f\n", "w f\r", "w\tf", "wf!", "wf\u{200b}"] {
+            assert!(
+                has_unsupported_paste(&[egui::Event::Paste(pasted.into())]),
+                "Unsafe pasted input was accepted: {pasted:?}"
+            );
+        }
+        for pasted in ["wf", "w f", "A 1 2"] {
+            assert!(
+                !has_unsupported_paste(&[egui::Event::Paste(pasted.into())]),
+                "Valid pasted input was blocked: {pasted:?}"
+            );
         }
     }
 

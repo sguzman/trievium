@@ -96,7 +96,7 @@ expression. See [Hyprland dispatchers](https://wiki.hypr.land/configuring/core/d
 Focus-dependent actions must
 set `focus_original: true` (the default): the HUD captures the window originally focused
 before mapping, checks that it remains mapped, restores focus and confirms
-that focus before invoking the dispatcher. Workspace focus dispatchers use `focus_original: false`. Hyprland return codes are checked.
+that focus before invoking the dispatcher. Workspace focus dispatchers use `focus_original: false`. Hyprland return codes **and** explicit `ok` responses are checked for both user-defined dispatches and Trievium's own popup focus/geometry operations; error text is never treated as success.
 Commands run on worker threads, not on the egui render path. Errors leave
 the HUD visible for correction, rather than pretending success.
 

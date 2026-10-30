@@ -1096,6 +1096,107 @@ mod tests {
     }
 
     #[test]
+    fn native_done_rejects_invalid_draft_then_saves_corrected_command() {
+        let dir = std::env::temp_dir().join(format!(
+            "trievium-command-done-retry-ui-test-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("commands.json");
+        let items = dir.join("items.json");
+        fs::write(&items, b"existing snippets").unwrap();
+        crate::commands::initialize_empty(&path).unwrap();
+        let before = fs::read(&path).unwrap();
+        let mut editor = CommandEditor::new(path.clone()).unwrap();
+        editor.config.commands.push(CommandEntry {
+            sequence: String::new(),
+            label: "Incomplete draft".into(),
+            action: Action::Exec {
+                program: String::new(),
+                args: Vec::new(),
+            },
+        });
+        editor.dirty = true;
+
+        let ctx = egui::Context::default();
+        let rect = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1280.0, 720.0));
+        let target = egui::pos2(250.0, 15.0);
+        let run = |editor: &mut CommandEditor, events: Vec<egui::Event>, time: f64| {
+            let mut action = EditorEvent::Stay;
+            ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(rect),
+                    time: Some(time),
+                    events,
+                    ..Default::default()
+                },
+                |ui| action = editor.ui(ui),
+            )
+            .drop_without_applying_deltas();
+            action
+        };
+        let pointer = |pressed| egui::Event::PointerButton {
+            pos: target,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        };
+        let click_done = |editor: &mut CommandEditor, time: f64| {
+            run(editor, Vec::new(), time);
+            run(
+                editor,
+                vec![egui::Event::PointerMoved(target), pointer(true)],
+                time + 0.1,
+            );
+            run(editor, vec![pointer(false)], time + 0.2);
+        };
+
+        click_done(&mut editor, 0.0);
+        for step in 0..250 {
+            run(&mut editor, Vec::new(), 0.3 + f64::from(step) * 0.02);
+            if !editor.busy() {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert!(!editor.busy(), "invalid Done save did not complete");
+        assert!(!editor.done_ready, "invalid registry exited the editor");
+        assert!(editor.error.is_some(), "validation failure was not displayed");
+        assert!(editor.dirty, "failed save lost the unsaved draft");
+        assert_eq!(fs::read(&path).unwrap(), before, "failed Done modified disk");
+        assert_eq!(fs::read(&items).unwrap(), b"existing snippets");
+
+        editor.config.commands[0].sequence = "a t".into();
+        editor.config.commands[0].action = Action::Exec {
+            program: "true".into(),
+            args: Vec::new(),
+        };
+        click_done(&mut editor, 6.0);
+        let mut completed = false;
+        for step in 0..250 {
+            if matches!(
+                run(&mut editor, Vec::new(), 6.3 + f64::from(step) * 0.02),
+                EditorEvent::Done
+            ) {
+                completed = true;
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert!(completed, "corrected Done did not return to the command picker");
+        assert!(!editor.busy());
+        assert!(!editor.dirty);
+        assert!(editor.error.is_none());
+        let loaded = CommandConfig::load(&path).unwrap();
+        assert_eq!(loaded.commands.len(), 1);
+        assert_eq!(loaded.commands[0].sequence, "a t");
+        assert_eq!(loaded.commands[0].label, "Incomplete draft");
+        assert_eq!(fs::read(&items).unwrap(), b"existing snippets");
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
     fn argv_lines_do_not_add_an_unintended_trailing_empty_argument() {
         assert!(parse_argv_lines("").is_empty());
         assert_eq!(parse_argv_lines("--title\nMy App\n"), ["--title", "My App"]);

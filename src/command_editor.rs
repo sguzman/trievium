@@ -49,6 +49,14 @@ fn format_argv_lines(args: &[String]) -> String {
     }
 }
 
+/// Line-oriented editing cannot distinguish an argv-embedded CR or LF from
+/// an argument separator. Preserve those values through other field edits
+/// rather than silently normalizing them through the text widget.
+fn has_embedded_line_break(args: &[String]) -> bool {
+    args.iter()
+        .any(|arg| arg.contains('\n') || arg.contains('\r'))
+}
+
 pub struct CommandEditor {
     path: PathBuf,
     /// Stable, fully resolved destination. Atomic rename must update this
@@ -60,7 +68,7 @@ pub struct CommandEditor {
     // Retain editable argv text across frames; never join large argument
     // vectors on every egui repaint.
     args_text: String,
-    // An argument with an embedded newline cannot be represented faithfully
+    // An argument with an embedded CR/LF cannot be represented faithfully
     // by one-argument-per-line text. Preserve it without exposing a lossy edit.
     argv_has_newline: bool,
     error: Option<String>,
@@ -185,7 +193,7 @@ impl CommandEditor {
         self.argv_has_newline = false;
         self.args_text = match &self.config.commands[index].action {
             Action::Exec { args, .. } => {
-                self.argv_has_newline = args.iter().any(|arg| arg.contains('\n'));
+                self.argv_has_newline = has_embedded_line_break(args);
                 if self.argv_has_newline {
                     String::new()
                 } else {
@@ -518,7 +526,8 @@ impl CommandEditor {
                     });
                     if self.argv_has_newline {
                         ui.label(
-                            "This command has an argument containing a newline.                              Its argv is preserved; edit it directly in commands.json.",
+                            "This command has an argument containing a line break. \
+                             Its argv is preserved; edit it directly in commands.json.",
                         );
                     } else {
                         ui.label("Arguments (one argv element per line; no shell)");
@@ -1164,6 +1173,23 @@ mod tests {
     }
 
     #[test]
+    fn cr_and_lf_arguments_require_lossless_raw_edit() {
+        let examples = [
+            vec!["plain".to_owned(), "".to_owned()],
+            vec!["first".to_owned(), "second".to_owned()],
+        ];
+        for args in examples {
+            assert!(!has_embedded_line_break(&args));
+        }
+        for value in ["one\ntwo", "one\rtwo", "one\r\ntwo", "\r", "\n"] {
+            assert!(
+                has_embedded_line_break(&[value.to_owned()]),
+                "An embedded line break must never enter a lossy textarea: {value:?}"
+            );
+        }
+    }
+
+    #[test]
     fn newline_argument_is_protected_from_lossy_line_edits() {
         let dir = std::env::temp_dir().join(format!(
             "trievium-command-multiline-argv-test-{}",
@@ -1179,7 +1205,7 @@ mod tests {
             label: "Multiline".into(),
             action: Action::Exec {
                 program: "printf".into(),
-                args: vec!["line 1\nline 2".into(), "".into()],
+                args: vec!["line 1\nline 2".into(), "line 3\rline 4".into(), "".into()],
             },
         });
         editor.select_command(0);
@@ -1203,7 +1229,7 @@ mod tests {
         assert_eq!(reloaded.commands[0].label, "Renamed");
         match &reloaded.commands[0].action {
             Action::Exec { args, .. } => {
-                assert_eq!(args, &["line 1\nline 2", ""]);
+                assert_eq!(args, &["line 1\nline 2", "line 3\rline 4", ""]);
             }
             Action::Hyprland { .. } => panic!("expected argv action"),
         }

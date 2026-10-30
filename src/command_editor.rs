@@ -373,22 +373,27 @@ impl CommandEditor {
         let mut discard = false;
         let mut close = false;
         let can_modify = self.pending.is_none() && self.pending_reload.is_none();
-        ui.horizontal(|ui| {
+        // The four actions must remain reachable at the 400px viewport
+        // minimum. A fixed horizontal toolbar clips its trailing buttons.
+        ui.horizontal_wrapped(|ui| {
             ui.heading("Trievium");
             ui.label(egui::RichText::new("Commands").weak());
-            save = ui
-                .add_enabled(can_modify, egui::Button::new("Save"))
-                .clicked();
+            let save_button = ui.add_enabled(can_modify, egui::Button::new("Save"));
+            #[cfg(test)]
+            self.test_hitboxes.insert("save", save_button.rect);
+            save = save_button.clicked();
             let done_button = ui.add_enabled(can_modify, egui::Button::new("Done"));
             #[cfg(test)]
             self.test_hitboxes.insert("done", done_button.rect);
             finish = done_button.clicked();
-            discard = ui
-                .add_enabled(can_modify, egui::Button::new("Discard"))
-                .clicked();
-            close = ui
-                .add_enabled(can_modify, egui::Button::new("Close"))
-                .clicked();
+            let discard_button = ui.add_enabled(can_modify, egui::Button::new("Discard"));
+            #[cfg(test)]
+            self.test_hitboxes.insert("discard", discard_button.rect);
+            discard = discard_button.clicked();
+            let close_button = ui.add_enabled(can_modify, egui::Button::new("Close"));
+            #[cfg(test)]
+            self.test_hitboxes.insert("close", close_button.rect);
+            close = close_button.clicked();
         });
         if close {
             if self.close_requested() {
@@ -397,7 +402,7 @@ impl CommandEditor {
             close = false;
         }
         if self.confirm_exit {
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 ui.colored_label(egui::Color32::YELLOW, "Unsaved edits will be lost.");
                 if ui.button("Keep editing").clicked() {
                     self.confirm_exit = false;
@@ -775,6 +780,10 @@ mod tests {
         .drop_without_applying_deltas();
 
         for control in [
+            "save",
+            "done",
+            "discard",
+            "close",
             "group_prefix",
             "group_name",
             "group_remove",

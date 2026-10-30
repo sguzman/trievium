@@ -279,6 +279,8 @@ cat > "$command_config" <<JSON
 ],"commands":[
   {"sequence":"w f","label":"Complete marker",
    "action":{"type":"exec","program":"touch","args":["$command_marker"]}},
+  {"sequence":"w e","label":"Deliberate launch error",
+   "action":{"type":"exec","program":"/trievium-ci-intentionally-nonexistent-executable","args":[]}},
   {"sequence":"w a t","label":"Deep marker",
    "action":{"type":"exec","program":"touch","args":["$deep_marker"]}}
 ]}
@@ -375,6 +377,55 @@ if [[ "$(wl-paste -n 2>/dev/null || true)" != "Brief selected" ]]; then
   exit 1
 fi
 echo "Wayland commands E2E passed: exact sequence executed; clipboard and items preserved."
+
+# Command-worker error regression: a missing executable must not exit the HUD
+# or leave it busy. The same picker must accept a subsequent valid shortcut.
+rm -f "$command_marker"
+./target/debug/trievium commands --config "$command_config" >"$XDG_RUNTIME_DIR/command-error-recovery.log" 2>&1 &
+picker_pid=$!
+found=""
+for _ in $(seq 1 100); do
+  found=$(swaymsg -s "$sway_sock" -t get_tree | grep -o '"app_id": "trievium"' | head -1 || true)
+  if [[ -n "$found" ]]; then
+    break
+  fi
+  sleep 0.1
+done
+if [[ -z "$found" ]]; then
+  echo "Command HUD did not map for failed-launch recovery" >&2
+  cat "$XDG_RUNTIME_DIR/command-error-recovery.log" >&2
+  exit 1
+fi
+swaymsg -s "$sway_sock" '[app_id="trievium"] focus'
+sleep 0.2
+wtype w
+wtype e
+sleep 0.5
+if [[ -e "$command_marker" ]] || ! kill -0 "$picker_pid" 2>/dev/null; then
+  echo "Failed command executed another action or unexpectedly closed HUD" >&2
+  cat "$XDG_RUNTIME_DIR/command-error-recovery.log" >&2
+  exit 1
+fi
+wtype w
+wtype f
+for _ in $(seq 1 70); do
+  if [[ -e "$command_marker" ]]; then
+    break
+  fi
+  sleep 0.1
+done
+if [[ ! -e "$command_marker" ]]; then
+  echo "Command HUD did not recover from failed process launch" >&2
+  cat "$XDG_RUNTIME_DIR/command-error-recovery.log" >&2
+  exit 1
+fi
+wait_for_picker_exit
+cmp "$config" "$XDG_RUNTIME_DIR/copy-before-commands.json"
+if [[ "$(wl-paste -n 2>/dev/null || true)" != "Brief selected" ]]; then
+  echo "Command error recovery unexpectedly modified clipboard" >&2
+  exit 1
+fi
+echo "Wayland command error recovery E2E passed: failed launch kept HUD open; next shortcut succeeded."
 
 
 # Native command editor is independently launchable and Escape must not

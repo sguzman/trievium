@@ -1008,6 +1008,40 @@ mod tests {
     }
 
     #[test]
+    fn clicked_retry_clears_stale_error_before_running_next_command() {
+        let mut config = CommandConfig::empty();
+        config.commands.push(CommandEntry {
+            sequence: "at".into(),
+            label: "Retry".into(),
+            action: Action::Exec {
+                program: "true".into(),
+                args: Vec::new(),
+            },
+        });
+        let command_index = CommandIndex::compile(&config);
+        let mut picker = CommandPicker {
+            config,
+            command_index,
+            visible_prefix: String::new(),
+            visible_choices: Vec::new(),
+            config_path: PathBuf::new(),
+            editor: None,
+            pending_editor: None,
+            pending_compilation: None,
+            original_window: None,
+            focus_state: hyprland::CommandPopupFocus::default(),
+            typed: String::new(),
+            error: Some("previous process failed".into()),
+            pending: None,
+            font_load_after: None,
+            font_load_started: true,
+        };
+        picker.choose(0, &egui::Context::default());
+        assert!(picker.error.is_none(), "retry still shows the old error");
+        assert!(picker.pending.is_some(), "retry did not start a worker");
+    }
+
+    #[test]
     fn ordinary_invalid_key_is_ignored_between_incremental_shortcut_keys() {
         let config = demo();
         config.validate().unwrap();

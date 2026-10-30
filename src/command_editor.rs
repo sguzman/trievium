@@ -1118,7 +1118,10 @@ mod tests {
             assert_eq!(parse_argv_lines(&rendered), args);
         }
         assert_eq!(format_argv_lines(&["".into()]), "\n");
-        assert_eq!(format_argv_lines(&["--title".into(), "".into()]), "--title\n\n");
+        assert_eq!(
+            format_argv_lines(&["--title".into(), "".into()]),
+            "--title\n\n"
+        );
     }
 
     #[test]

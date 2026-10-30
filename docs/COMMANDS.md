@@ -133,7 +133,10 @@ Opening `commands edit` on a fresh installation initializes *only*
 The editor's filesystem reads, validation, saves and Discard reloads run
 outside egui's UI thread. Changes saved with **Done** are immediately
 available in the HUD. Commands and groups each have **Up** and **Down**
-controls for ordering their entries in the editor and JSON registry. The
+controls for ordering their entries in the editor and JSON registry.
+In the program-argument editor, each line represents one argv element.
+A single final newline does not add an empty argument; a deliberately
+blank interior line remains an explicit empty argument. The
 command HUD still orders choices by their actual shortcut keys rather than
 the order of the JSON entries. **Done without local edits** still reloads and
 validates the current disk snapshot on a worker before returning to the

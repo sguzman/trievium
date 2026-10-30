@@ -71,7 +71,9 @@ impl CommandPopupFocus {
 
     pub fn recover_after_error(&self, original: Option<&str>) {
         self.run_action(|| {
-            if std::env::var_os("HYPRLAND_INSTANCE_SIGNATURE").is_some_and(|s| !s.is_empty())
+            if original.is_some()
+                && std::env::var_os("HYPRLAND_INSTANCE_SIGNATURE")
+                    .is_some_and(|s| !s.is_empty())
                 && let Some(address) = our_floating_window_address(std::process::id())
                 && Command::new("hyprctl")
                     .args(["-j", "activewindow"])
@@ -88,7 +90,8 @@ impl CommandPopupFocus {
                     eprintln!("trievium: could not restore command HUD focus: {error}");
                 }
             }
-            self.action_started.store(false, Ordering::SeqCst);
+            // Keep startup focus permanently disarmed after the first action.
+            // Otherwise a delayed map worker could steal focus after failure.
         });
     }
 }
@@ -467,6 +470,17 @@ mod tests {
         drop(initial_focus_guard);
         done_receiver.recv().unwrap();
         thread.join().unwrap();
+    }
+
+    #[test]
+    fn failed_action_does_not_rearm_delayed_startup_focus() {
+        let focus = CommandPopupFocus::default();
+        focus.mark_action_started();
+        focus.recover_after_error(None);
+        assert!(
+            focus.action_started.load(Ordering::SeqCst),
+            "the initial focus worker must stay disarmed after a failed action"
+        );
     }
 
     #[test]

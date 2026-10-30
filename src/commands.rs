@@ -181,13 +181,20 @@ impl CommandConfig {
     /// Invalid keys are ignored; a valid preceding prefix remains editable.
     pub fn resolve(&self, typed: &str) -> Resolution {
         let mut prefix = String::new();
-        for key in typed.chars() {
+        for (offset, key) in typed.char_indices() {
             if !key.is_ascii_alphanumeric() {
                 continue;
             }
             prefix.push(key.to_ascii_uppercase());
             if let Some(index) = self.completed(&prefix) {
-                return Resolution::Selected(index);
+                // A paste or IME update is one input event. Never execute the
+                // first complete command in a longer string such as "wf rm".
+                // Ordinary incremental typing still selects at the last key.
+                return if offset + key.len_utf8() == typed.len() {
+                    Resolution::Selected(index)
+                } else {
+                    Resolution::Continue(String::new())
+                };
             }
             if !self.matched(&prefix) {
                 prefix.pop();
@@ -303,13 +310,17 @@ impl CommandIndex {
 
     fn resolve(&self, typed: &str) -> Resolution {
         let mut prefix = String::new();
-        for key in typed.chars() {
+        for (offset, key) in typed.char_indices() {
             if !key.is_ascii_alphanumeric() {
                 continue;
             }
             prefix.push(key.to_ascii_uppercase());
             if let Some(&index) = self.terminals.get(&prefix) {
-                return Resolution::Selected(index);
+                return if offset + key.len_utf8() == typed.len() {
+                    Resolution::Selected(index)
+                } else {
+                    Resolution::Continue(String::new())
+                };
             }
             if !self.branches.contains_key(&prefix) {
                 prefix.pop();
@@ -885,6 +896,29 @@ mod tests {
         assert_eq!(config.resolve("wxc"), Resolution::Selected(1));
         assert_eq!(config.resolve("a"), Resolution::Continue("A".into()));
         assert_eq!(config.resolve("at"), Resolution::Selected(2));
+    }
+
+    #[test]
+    fn pasted_extra_text_never_executes_a_prefix_command() {
+        let config = demo();
+        config.validate().unwrap();
+        let index = CommandIndex::compile(&config);
+        for typed in ["wfx", "wf extra", "wf ", "wf!", "wf\\nwat", "wxcfoo"] {
+            assert_eq!(
+                config.resolve(typed),
+                Resolution::Continue(String::new()),
+                "reference reducer executed a truncated paste: {typed:?}"
+            );
+            assert_eq!(
+                index.resolve(typed),
+                Resolution::Continue(String::new()),
+                "indexed reducer executed a truncated paste: {typed:?}"
+            );
+        }
+        for (typed, selected) in [("wf", 0), ("w f", 0), ("wxc", 1), ("at", 2)] {
+            assert_eq!(config.resolve(typed), Resolution::Selected(selected));
+            assert_eq!(index.resolve(typed), Resolution::Selected(selected));
+        }
     }
 
     #[test]

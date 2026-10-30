@@ -674,7 +674,9 @@ impl CommandPicker {
 fn has_transformed_text_input(events: &[egui::Event], retained: &str) -> bool {
     events.iter().any(|event| {
         let text = match event {
-            egui::Event::Paste(text) | egui::Event::Text(text) => text,
+            egui::Event::Paste(text)
+            | egui::Event::Text(text)
+            | egui::Event::Ime(egui::ImeEvent::Commit(text)) => text,
             _ => return false,
         };
         text.len() > MAX_TYPED_CHARS
@@ -1048,10 +1050,22 @@ mod tests {
                 "Unsafe input method text was accepted: {input:?}"
             );
         }
+        assert!(!has_transformed_text_input(
+            &[egui::Event::Ime(egui::ImeEvent::Commit("wf".into()))],
+            "wf",
+        ));
+        assert!(has_transformed_text_input(
+            &[egui::Event::Ime(egui::ImeEvent::Commit("wf\\n".into()))],
+            "wf",
+        ));
         let valid = "a b c d e f g h i j k  l";
         assert_eq!(valid.len(), MAX_TYPED_CHARS);
         assert!(has_transformed_text_input(
             &[egui::Event::Text(format!("{valid}EXTRA"))],
+            valid
+        ));
+        assert!(has_transformed_text_input(
+            &[egui::Event::Ime(egui::ImeEvent::Commit(format!("{valid}EXTRA")))],
             valid
         ));
     }

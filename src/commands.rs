@@ -1065,7 +1065,9 @@ mod tests {
             valid
         ));
         assert!(has_transformed_text_input(
-            &[egui::Event::Ime(egui::ImeEvent::Commit(format!("{valid}EXTRA")))],
+            &[egui::Event::Ime(egui::ImeEvent::Commit(format!(
+                "{valid}EXTRA"
+            )))],
             valid
         ));
     }

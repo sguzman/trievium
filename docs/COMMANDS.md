@@ -145,7 +145,7 @@ In the program-argument editor, each line represents one argv element.
 One structural final newline does not add an empty argument; an additional
 blank line represents an intentional empty argument, even at the end of
 the list. Existing empty argv elements are preserved exactly when a command
-is reopened and edited. If an existing argument contains an embedded newline,
+is reopened and edited. If an existing argument contains a line break (CR or LF),
 the editor protects it from lossy line-based edits and shows an explanation;
 edit that special-case argv directly in `commands.json`. The
 command HUD still orders choices by their actual shortcut keys rather than

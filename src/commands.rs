@@ -897,7 +897,8 @@ mod tests {
         config.validate().unwrap();
         assert_eq!(config.resolve("w"), Resolution::Continue("W".into()));
         assert_eq!(config.resolve("wf"), Resolution::Selected(0));
-        assert_eq!(config.resolve("wxc"), Resolution::Selected(1));
+        assert_eq!(config.resolve("wc"), Resolution::Selected(1));
+        assert_eq!(config.resolve("wxc"), Resolution::Continue(String::new()));
         assert_eq!(config.resolve("a"), Resolution::Continue("A".into()));
         assert_eq!(config.resolve("at"), Resolution::Selected(2));
     }
@@ -908,8 +909,8 @@ mod tests {
         config.validate().unwrap();
         let index = CommandIndex::compile(&config);
         for typed in [
-            "wfx", "wf extra", "wf ", "wf!", "wf\nwat", "wxcfoo", "zwf", "wzf", "?wf", "w?f",
-            "w f!",
+            "wfx", "wf extra", "wf ", "wf!", "wf\nwat", "wxc", "wxcfoo", "zwf", "wzf",
+            "?wf", "w?f", "w f!",
         ] {
             assert_eq!(
                 config.resolve(typed),
@@ -922,7 +923,7 @@ mod tests {
                 "indexed reducer executed a truncated paste: {typed:?}"
             );
         }
-        for (typed, selected) in [("wf", 0), ("w f", 0), ("wxc", 1), ("at", 2)] {
+        for (typed, selected) in [("wf", 0), ("w f", 0), ("wc", 1), ("at", 2)] {
             assert_eq!(config.resolve(typed), Resolution::Selected(selected));
             assert_eq!(index.resolve(typed), Resolution::Selected(selected));
         }

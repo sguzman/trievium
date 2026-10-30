@@ -355,6 +355,9 @@ impl CommandEditor {
         if discard {
             // A slow filesystem or large JSON registry must not block egui.
             self.begin_reload();
+            // An action click can be the final input event. Schedule the first
+            // worker-result poll rather than waiting for an incidental redraw.
+            ui.ctx().request_repaint_after(Duration::from_millis(20));
             return EditorEvent::Stay;
         }
         if let Some(error) = &self.error {
@@ -370,6 +373,11 @@ impl CommandEditor {
         }
         if save || finish {
             self.begin_save(finish);
+            // begin_save may also start a reload for an unmodified Done.
+            // Either worker needs an explicit first poll when input stops.
+            if self.busy() {
+                ui.ctx().request_repaint_after(Duration::from_millis(20));
+            }
             return EditorEvent::Stay;
         }
 

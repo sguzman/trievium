@@ -6,6 +6,8 @@ use crate::manager::Manager;
 use anyhow::{Context, Result, bail};
 use eframe::egui;
 use std::fs;
+#[cfg(test)]
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -81,6 +83,9 @@ pub struct CommandEditor {
     finish_after_reload: bool,
     done_ready: bool,
     confirm_exit: bool,
+    // UI tests follow actual egui response bounds instead of stale pixels.
+    #[cfg(test)]
+    test_hitboxes: BTreeMap<&'static str, egui::Rect>,
 }
 
 fn write_atomic(
@@ -231,6 +236,8 @@ impl CommandEditor {
             finish_after_reload: false,
             done_ready: false,
             confirm_exit: false,
+            #[cfg(test)]
+            test_hitboxes: BTreeMap::new(),
         })
     }
 
@@ -372,9 +379,10 @@ impl CommandEditor {
             save = ui
                 .add_enabled(can_modify, egui::Button::new("Save"))
                 .clicked();
-            finish = ui
-                .add_enabled(can_modify, egui::Button::new("Done"))
-                .clicked();
+            let done_button = ui.add_enabled(can_modify, egui::Button::new("Done"));
+            #[cfg(test)]
+            self.test_hitboxes.insert("done", done_button.rect);
+            finish = done_button.clicked();
             discard = ui
                 .add_enabled(can_modify, egui::Button::new("Discard"))
                 .clicked();
@@ -442,7 +450,10 @@ impl CommandEditor {
         ui.add_space(10.0);
         ui.horizontal_wrapped(|ui| {
             ui.heading("Commands");
-            if ui.button("New").clicked() {
+            let new_button = ui.button("New");
+            #[cfg(test)]
+            self.test_hitboxes.insert("new_command", new_button.rect);
+            if new_button.clicked() {
                 self.config.commands.push(CommandEntry {
                     sequence: String::new(),
                     label: "New command".into(),
@@ -455,17 +466,26 @@ impl CommandEditor {
                 self.dirty = true;
             }
             if let Some(index) = self.selected {
-                if ui.button("Up").clicked() && index > 0 {
+                let button = ui.button("Up");
+                #[cfg(test)]
+                self.test_hitboxes.insert("up_command", button.rect);
+                if button.clicked() && index > 0 {
                     self.config.commands.swap(index, index - 1);
                     self.selected = Some(index - 1);
                     self.dirty = true;
                 }
-                if ui.button("Down").clicked() && index + 1 < self.config.commands.len() {
+                let button = ui.button("Down");
+                #[cfg(test)]
+                self.test_hitboxes.insert("down_command", button.rect);
+                if button.clicked() && index + 1 < self.config.commands.len() {
                     self.config.commands.swap(index, index + 1);
                     self.selected = Some(index + 1);
                     self.dirty = true;
                 }
-                if ui.button("Delete").clicked() && index < self.config.commands.len() {
+                let button = ui.button("Delete");
+                #[cfg(test)]
+                self.test_hitboxes.insert("delete_command", button.rect);
+                if button.clicked() && index < self.config.commands.len() {
                     self.config.commands.remove(index);
                     self.selected = None;
                     self.args_text.clear();
@@ -625,7 +645,10 @@ impl CommandEditor {
         ui.add_space(10.0);
         ui.horizontal_wrapped(|ui| {
             ui.heading("Groups");
-            if ui.button("New group").clicked() {
+            let button = ui.button("New group");
+            #[cfg(test)]
+            self.test_hitboxes.insert("new_group", button.rect);
+            if button.clicked() {
                 self.config.groups.push(Group {
                     prefix: String::new(),
                     label: String::new(),
@@ -779,8 +802,7 @@ mod tests {
         editor.select_command(1);
         let ctx = egui::Context::default();
         let mut timestamp = 0.0;
-        let click = |editor: &mut CommandEditor, x: f32, ctx: &egui::Context, time: &mut f64| {
-            let target = egui::pos2(x, 46.0);
+        let click = |editor: &mut CommandEditor, button: &'static str, ctx: &egui::Context, time: &mut f64| {
             let frame = |editor: &mut CommandEditor, events: Vec<egui::Event>, time: f64| {
                 ctx.run_ui(
                     egui::RawInput {
@@ -798,13 +820,14 @@ mod tests {
                 )
                 .drop_without_applying_deltas();
             };
+            frame(editor, Vec::new(), *time);
+            let target = editor.test_hitboxes[button].center();
             let pointer = |pressed| egui::Event::PointerButton {
                 pos: target,
                 button: egui::PointerButton::Primary,
                 pressed,
                 modifiers: egui::Modifiers::NONE,
             };
-            frame(editor, Vec::new(), *time);
             *time += 0.1;
             frame(
                 editor,
@@ -815,7 +838,7 @@ mod tests {
             frame(editor, vec![pointer(false)], *time);
             *time += 0.1;
         };
-        click(&mut editor, 172.0, &ctx, &mut timestamp);
+        click(&mut editor, "up_command", &ctx, &mut timestamp);
         assert_eq!(
             editor.config.commands[0].sequence, "w f",
             "native Up did not move the selected command"
@@ -836,7 +859,7 @@ mod tests {
             "w f"
         );
 
-        click(&mut editor, 220.0, &ctx, &mut timestamp);
+        click(&mut editor, "down_command", &ctx, &mut timestamp);
         assert_eq!(
             editor.config.commands[1].sequence, "w f",
             "native Down did not move the selected command"
@@ -882,7 +905,6 @@ mod tests {
         let mut editor = CommandEditor::new(path.clone()).unwrap();
         editor.select_command(0);
         let ctx = egui::Context::default();
-        let target = egui::pos2(291.0, 46.0);
         let frame = |editor: &mut CommandEditor, events: Vec<egui::Event>, time: f64| {
             ctx.run_ui(
                 egui::RawInput {
@@ -900,13 +922,14 @@ mod tests {
             )
             .drop_without_applying_deltas();
         };
+        frame(&mut editor, Vec::new(), 0.0);
+        let target = editor.test_hitboxes["delete_command"].center();
         let pointer = |pressed| egui::Event::PointerButton {
             pos: target,
             button: egui::PointerButton::Primary,
             pressed,
             modifiers: egui::Modifiers::NONE,
         };
-        frame(&mut editor, Vec::new(), 0.0);
         frame(
             &mut editor,
             vec![egui::Event::PointerMoved(target), pointer(true)],
@@ -956,7 +979,6 @@ mod tests {
         fs::write(&path, serde_json::to_vec_pretty(&config).unwrap()).unwrap();
         let mut editor = CommandEditor::new(path.clone()).unwrap();
         let ctx = egui::Context::default();
-        let target = egui::pos2(121.0, 118.0);
         let frame = |editor: &mut CommandEditor, events: Vec<egui::Event>, time: f64| {
             ctx.run_ui(
                 egui::RawInput {
@@ -974,13 +996,14 @@ mod tests {
             )
             .drop_without_applying_deltas();
         };
+        frame(&mut editor, Vec::new(), 0.0);
+        let target = editor.test_hitboxes["new_group"].center();
         let pointer = |pressed| egui::Event::PointerButton {
             pos: target,
             button: egui::PointerButton::Primary,
             pressed,
             modifiers: egui::Modifiers::NONE,
         };
-        frame(&mut editor, Vec::new(), 0.0);
         frame(
             &mut editor,
             vec![egui::Event::PointerMoved(target), pointer(true)],
@@ -1028,7 +1051,6 @@ mod tests {
         let ctx = egui::Context::default();
         // The New button sits alongside the Commands heading, below the
         // Save/Done toolbar in the undecorated native editor.
-        let target = egui::pos2(145.0, 46.0);
         let frame = |editor: &mut CommandEditor, events: Vec<egui::Event>, time: f64| {
             ctx.run_ui(
                 egui::RawInput {
@@ -1046,13 +1068,14 @@ mod tests {
             )
             .drop_without_applying_deltas();
         };
+        frame(&mut editor, Vec::new(), 0.0);
+        let target = editor.test_hitboxes["new_command"].center();
         let pointer = |pressed| egui::Event::PointerButton {
             pos: target,
             button: egui::PointerButton::Primary,
             pressed,
             modifiers: egui::Modifiers::NONE,
         };
-        frame(&mut editor, Vec::new(), 0.0);
         frame(
             &mut editor,
             vec![egui::Event::PointerMoved(target), pointer(true)],
@@ -1118,7 +1141,6 @@ mod tests {
         let mut editor = CommandEditor::new(path.clone()).unwrap();
         let ctx = egui::Context::default();
         let screen_rect = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1280.0, 720.0));
-        let target = egui::pos2(250.0, 15.0);
         let run = |editor: &mut CommandEditor, events: Vec<egui::Event>, time: f64| {
             let mut action = EditorEvent::Stay;
             ctx.run_ui(
@@ -1133,16 +1155,17 @@ mod tests {
             .drop_without_applying_deltas();
             action
         };
+        assert!(matches!(
+            run(&mut editor, Vec::new(), 0.0),
+            EditorEvent::Stay
+        ));
+        let target = editor.test_hitboxes["done"].center();
         let pointer = |pressed| egui::Event::PointerButton {
             pos: target,
             button: egui::PointerButton::Primary,
             pressed,
             modifiers: egui::Modifiers::NONE,
         };
-        assert!(matches!(
-            run(&mut editor, Vec::new(), 0.0),
-            EditorEvent::Stay
-        ));
         assert!(matches!(
             run(
                 &mut editor,
@@ -1199,7 +1222,6 @@ mod tests {
 
         let ctx = egui::Context::default();
         let rect = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1280.0, 720.0));
-        let target = egui::pos2(250.0, 15.0);
         let run = |editor: &mut CommandEditor, events: Vec<egui::Event>, time: f64| {
             let mut action = EditorEvent::Stay;
             ctx.run_ui(
@@ -1214,14 +1236,15 @@ mod tests {
             .drop_without_applying_deltas();
             action
         };
-        let pointer = |pressed| egui::Event::PointerButton {
-            pos: target,
-            button: egui::PointerButton::Primary,
-            pressed,
-            modifiers: egui::Modifiers::NONE,
-        };
         let click_done = |editor: &mut CommandEditor, time: f64| {
             run(editor, Vec::new(), time);
+            let target = editor.test_hitboxes["done"].center();
+            let pointer = |pressed| egui::Event::PointerButton {
+                pos: target,
+                button: egui::PointerButton::Primary,
+                pressed,
+                modifiers: egui::Modifiers::NONE,
+            };
             run(
                 editor,
                 vec![egui::Event::PointerMoved(target), pointer(true)],

@@ -93,6 +93,8 @@ rejecting text that the single-line field truncated or transformed, including
 sequences with additional separator spaces. Pasted punctuation, non-ASCII
 characters and control characters (including line breaks) are rejected
 before execution rather than relying on text-field sanitization.
+Ordinary text and IME commit events receive the same raw-input protection,
+so a transformed or truncated input-method commit cannot execute a command.
 Normal key-by-key entry still ignores an invalid key and preserves the prefix.
 Escape cancels, Backspace edits, and clicking a HUD branch advances it.
 

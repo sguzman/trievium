@@ -11,8 +11,8 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use crate::appearance::Appearance;
-use crate::command_editor::{CommandEditor, EditorEvent};
 use crate::colors;
+use crate::command_editor::{CommandEditor, EditorEvent};
 use crate::hyprland;
 
 const MAX_SEQUENCE: usize = 12;
@@ -873,11 +873,8 @@ impl eframe::App for CommandPicker {
                                     egui::vec2(22.0, 24.0),
                                     egui::Sense::hover(),
                                 );
-                                ui.painter().rect_filled(
-                                    rect,
-                                    egui::CornerRadius::same(5),
-                                    accent,
-                                );
+                                ui.painter()
+                                    .rect_filled(rect, egui::CornerRadius::same(5), accent);
                                 let button = ui.add_sized(
                                     [54.0, 24.0],
                                     egui::Button::new(

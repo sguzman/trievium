@@ -157,7 +157,13 @@ is not already claimed. Then test these cases with harmless commands:
    return to the picker, and verify the new structure. While the editor is
    open, modify the file from another process and confirm Save refuses to
    overwrite the external change.
-6. **Regression:** launch the *original* `trievium` copy HUD, select a
+6. **Failed action recovery:** configure a harmless nonexistent executable,
+   invoke its full shortcut, and confirm the HUD displays an error rather than
+   closing or remaining busy. Without relaunching the HUD, type a working
+   shortcut and confirm it runs and the HUD closes. The headless Wayland
+   regression covers the recovery path; the actual error display still needs
+   desktop confirmation.
+7. **Regression:** launch the *original* `trievium` copy HUD, select a
    snippet, paste it, and verify it is unchanged. Confirm
    `trievium manage` still edits the old library.
 

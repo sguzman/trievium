@@ -72,8 +72,7 @@ impl CommandPopupFocus {
     pub fn recover_after_error(&self, original: Option<&str>) {
         self.run_action(|| {
             if original.is_some()
-                && std::env::var_os("HYPRLAND_INSTANCE_SIGNATURE")
-                    .is_some_and(|s| !s.is_empty())
+                && std::env::var_os("HYPRLAND_INSTANCE_SIGNATURE").is_some_and(|s| !s.is_empty())
                 && let Some(address) = our_floating_window_address(std::process::id())
                 && Command::new("hyprctl")
                     .args(["-j", "activewindow"])

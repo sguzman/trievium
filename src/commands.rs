@@ -949,7 +949,7 @@ mod tests {
                 },
                 |ui| {
                     let field = ui.add(
-                        egui::TextEdit::singleline(&mut typed)
+                        egui::TextEdit::singleline(typed)
                             .desired_width(135.0)
                             .char_limit(MAX_SEQUENCE),
                     );

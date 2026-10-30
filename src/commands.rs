@@ -1088,7 +1088,10 @@ mod tests {
             typed.len() > spaced.len(),
             "TextEdit silently truncated the oversized paste to a valid command"
         );
-        assert_eq!(long_index.resolve(&typed), Resolution::Continue(String::new()));
+        assert_eq!(
+            long_index.resolve(&typed),
+            Resolution::Continue(String::new())
+        );
     }
 
     #[test]

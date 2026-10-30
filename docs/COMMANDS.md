@@ -172,6 +172,9 @@ is not already claimed. Then test these cases with harmless commands:
 3. **Focus-sensitive action:** from a regular tiled window, use a reversible
    command such as fullscreen. Verify it affects that original window, **not**
    the Trievium HUD, and does not tile or rearrange other windows.
+   Invoke a short harmless command immediately after opening the HUD and
+   verify that even an early selection does not leave the popup tiled or
+   rearrange other windows.
    Also test a moved original window, if practical: move it silently to
    another workspace while the HUD is open, then complete a focus-dependent
    command. The HUD should report an error instead of changing workspace.

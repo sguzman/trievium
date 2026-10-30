@@ -409,6 +409,16 @@ pub fn run(args: &[String]) -> Result<()> {
     while index < args.len() {
         match args[index].as_str() {
             "init" | "validate" | "config-path" | "edit" => operation = &args[index],
+            "--version" | "-V" => {
+                println!("trievium {}", env!("CARGO_PKG_VERSION"));
+                return Ok(());
+            }
+            "--help" | "-h" => {
+                println!(
+                    "Trievium command tree - hierarchical command HUD\n\nUsage: trievium commands [pick|edit|init|validate|config-path] [--config PATH] [--theme system|light|dark]\n\nDefault: command HUD. Independent registry: commands.json"
+                );
+                return Ok(());
+            }
             "--config" => {
                 index += 1;
                 override_path = Some(PathBuf::from(

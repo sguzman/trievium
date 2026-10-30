@@ -138,8 +138,12 @@ outside egui's UI thread. Changes saved with **Done** are immediately
 available in the HUD. Commands and groups each have **Up** and **Down**
 controls for ordering their entries in the editor and JSON registry.
 In the program-argument editor, each line represents one argv element.
-A single final newline does not add an empty argument; a deliberately
-blank interior line remains an explicit empty argument. The
+One structural final newline does not add an empty argument; an additional
+blank line represents an intentional empty argument, even at the end of
+the list. Existing empty argv elements are preserved exactly when a command
+is reopened and edited. If an existing argument contains an embedded newline,
+the editor protects it from lossy line-based edits and shows an explanation;
+edit that special-case argv directly in `commands.json`. The
 command HUD still orders choices by their actual shortcut keys rather than
 the order of the JSON entries. **Done without local edits** still reloads and
 validates the current disk snapshot on a worker before returning to the

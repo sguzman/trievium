@@ -187,9 +187,12 @@ is not already claimed. Then test these cases with harmless commands:
 5. **Editor round trip:** add/edit/reorder/delete a command or group, save,
    return to the picker, and verify the new structure. Confirm the HUD returns
    to picker-sized geometry rather than retaining the larger editor dimensions;
-   repeat the transition promptly to exercise delayed resize workers. While
-   the editor is open, modify the file from another process and confirm Save
-   refuses to overwrite the external change.
+   repeat the transition promptly to exercise delayed resize workers.
+   Click Done with an incomplete/invalid command: the editor must remain open,
+   preserve the unsaved draft and leave the saved registry unchanged. Correct
+   the command and click Done again: it must save and return to the picker.
+   While the editor is open, modify the file from another process and confirm
+   Save refuses to overwrite the external change.
 6. **Failed action recovery:** configure a harmless nonexistent executable,
    invoke its full shortcut, and confirm the HUD displays an error rather than
    closing or remaining busy. Without relaunching the HUD, type a working

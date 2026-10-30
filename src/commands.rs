@@ -909,8 +909,8 @@ mod tests {
         config.validate().unwrap();
         let index = CommandIndex::compile(&config);
         for typed in [
-            "wfx", "wf extra", "wf ", "wf!", "wf\nwat", "wxc", "wxcfoo", "zwf", "wzf",
-            "?wf", "w?f", "w f!",
+            "wfx", "wf extra", "wf ", "wf!", "wf\nwat", "wxc", "wxcfoo", "zwf", "wzf", "?wf",
+            "w?f", "w f!",
         ] {
             assert_eq!(
                 config.resolve(typed),

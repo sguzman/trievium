@@ -929,6 +929,29 @@ mod tests {
     }
 
     #[test]
+    fn ordinary_invalid_key_is_ignored_between_incremental_shortcut_keys() {
+        let config = demo();
+        config.validate().unwrap();
+        let index = CommandIndex::compile(&config);
+        let mut typed = String::new();
+        for (key, expected) in [
+            ('w', Resolution::Continue("W".into())),
+            ('z', Resolution::Continue("W".into())),
+            ('f', Resolution::Selected(0)),
+        ] {
+            typed.push(key);
+            let resolved = index.resolve(&typed);
+            assert_eq!(resolved, expected);
+            assert_eq!(resolved, config.resolve(&typed));
+            if let Resolution::Continue(prefix) = resolved {
+                // Matches CommandPicker::accept: ignore invalid individual
+                // keys before the next keyboard event reaches the field.
+                typed = prefix.to_ascii_lowercase();
+            }
+        }
+    }
+
+    #[test]
     fn compiled_prefix_index_matches_reference_reducer_and_branch_labels() {
         let config = demo();
         config.validate().unwrap();

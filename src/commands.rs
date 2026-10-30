@@ -190,7 +190,9 @@ impl CommandConfig {
                 // A paste or IME update is one input event. Never execute the
                 // first complete command in a longer string such as "wf rm".
                 // Ordinary incremental typing still selects at the last key.
-                return if offset + key.len_utf8() == typed.len() {
+                return if offset + key.len_utf8() == typed.len()
+                    && normalized(typed).is_ok_and(|raw| raw == prefix)
+                {
                     Resolution::Selected(index)
                 } else {
                     Resolution::Continue(String::new())
@@ -316,7 +318,9 @@ impl CommandIndex {
             }
             prefix.push(key.to_ascii_uppercase());
             if let Some(&index) = self.terminals.get(&prefix) {
-                return if offset + key.len_utf8() == typed.len() {
+                return if offset + key.len_utf8() == typed.len()
+                    && normalized(typed).is_ok_and(|raw| raw == prefix)
+                {
                     Resolution::Selected(index)
                 } else {
                     Resolution::Continue(String::new())
@@ -903,7 +907,10 @@ mod tests {
         let config = demo();
         config.validate().unwrap();
         let index = CommandIndex::compile(&config);
-        for typed in ["wfx", "wf extra", "wf ", "wf!", "wf\nwat", "wxcfoo"] {
+        for typed in [
+            "wfx", "wf extra", "wf ", "wf!", "wf\nwat", "wxcfoo", "zwf", "wzf",
+            "?wf", "w?f", "w f!",
+        ] {
             assert_eq!(
                 config.resolve(typed),
                 Resolution::Continue(String::new()),

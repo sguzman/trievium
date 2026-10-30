@@ -50,6 +50,7 @@ The original copy HUD and `items.json` must remain independent from
 
 ### Verified checkpoint and dependencies
 
+- [Latest green implementation CI `c3d62488`](https://github.com/sguzman/trievium/actions/runs/40977301318): **92 Rust tests, zero failures**, strict Clippy, CLI smoke, headless Wayland regression, optimized release build and checksum package. The new dispatcher-response regression rejects error text even when the command exits successfully. Internal popup focus/geometry and user Hyprland actions now share the same explicit `ok` check. This does not verify live Hyprland behavior.
 - [Latest green CI `4c12e689`](https://github.com/sguzman/trievium/actions/runs/40972989550): **91 Rust tests, zero failures**, strict Clippy, CLI smoke, both Wayland HUD regressions, optimized release build, and checksum-verified package. The added group-order persistence test passed. This does not replace real-session Hyprland QA.
 - [Green CI `add402eb`](https://github.com/sguzman/trievium/actions/runs/40970574576):
   **90 Rust tests**, strict Clippy, original copy/command HUD Wayland E2E,

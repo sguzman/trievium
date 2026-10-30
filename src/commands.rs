@@ -912,8 +912,14 @@ mod tests {
             "init".into(),
         ];
         let error = run(&args).unwrap_err().to_string();
-        assert!(error.contains("Specify only one commands operation"), "{error}");
-        assert!(!path.exists(), "conflicting CLI operations created a registry");
+        assert!(
+            error.contains("Specify only one commands operation"),
+            "{error}"
+        );
+        assert!(
+            !path.exists(),
+            "conflicting CLI operations created a registry"
+        );
     }
 
     #[test]

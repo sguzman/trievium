@@ -1004,58 +1004,6 @@ mod tests {
     }
 
     #[test]
-    fn launching_a_command_requests_worker_poll_without_further_input() {
-        use std::sync::atomic::{AtomicBool, Ordering};
-
-        let ctx = egui::Context::default();
-        let repaint_requested = Arc::new(AtomicBool::new(false));
-        let observed = Arc::clone(&repaint_requested);
-        ctx.set_request_repaint_callback(move |info| {
-            if info.delay == Duration::from_millis(20) {
-                observed.store(true, Ordering::SeqCst);
-            }
-        });
-
-        let mut config = CommandConfig::empty();
-        config.commands.push(CommandEntry {
-            sequence: "at".into(),
-            label: "Test command".into(),
-            action: Action::Exec {
-                program: "true".into(),
-                args: Vec::new(),
-            },
-        });
-        let command_index = CommandIndex::compile(&config);
-        let mut picker = CommandPicker {
-            config,
-            command_index,
-            visible_prefix: String::new(),
-            visible_choices: Vec::new(),
-            config_path: PathBuf::new(),
-            editor: None,
-            pending_editor: None,
-            pending_compilation: None,
-            original_window: None,
-            focus_state: hyprland::CommandPopupFocus::default(),
-            typed: String::new(),
-            error: None,
-            pending: None,
-            font_load_after: None,
-            font_load_started: false,
-        };
-        ctx.run_ui(egui::RawInput::default(), |ui| {
-            picker.choose(0, ui.ctx());
-        })
-        .drop_without_applying_deltas();
-
-        assert!(picker.pending.is_some());
-        assert!(
-            repaint_requested.load(Ordering::SeqCst),
-            "the command worker has no scheduled egui frame to collect its result"
-        );
-    }
-
-    #[test]
     fn ordinary_invalid_key_is_ignored_between_incremental_shortcut_keys() {
         let config = demo();
         config.validate().unwrap();

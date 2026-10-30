@@ -139,7 +139,11 @@ Opening `commands edit` on a fresh installation initializes *only*
 `commands.json`; the original clipboard library is left untouched.
 The editor's filesystem reads, validation, saves and Discard reloads run
 outside egui's UI thread. Changes saved with **Done** are immediately
-available in the HUD. Commands and groups each have **Up** and **Down**
+available in the HUD. The command editor now reuses the original Trievium
+manager's padded layout and outlined fields, shows an accent on each command
+row, and scrolls when the window is too short for the complete form.
+Native system clipboard support is explicitly enabled for egui text fields,
+including Ctrl+V on Wayland; verify this in the actual Hyprland session. Commands and groups each have **Up** and **Down**
 controls for ordering their entries in the editor and JSON registry.
 On Hyprland, popup resize requests are serialized and stale worker requests
 are discarded so switching back to the picker retains picker-sized geometry.
@@ -184,7 +188,8 @@ is not already claimed. Then test these cases with harmless commands:
 4. **Global action:** explicitly set `focus_original: false` on a workspace
    switch (for example, workspace 6). Verify the target workspace activates
    and the HUD exits without stealing focus back.
-5. **Editor round trip:** add/edit/reorder/delete a command or group, save,
+5. **Editor round trip:** verify the familiar padded/outlined layout and
+   paste a short string into a text field with Ctrl+V; then add/edit/reorder/delete a command or group, save,
    return to the picker, and verify the new structure. Confirm the HUD returns
    to picker-sized geometry rather than retaining the larger editor dimensions;
    repeat the transition promptly to exercise delayed resize workers.
@@ -208,6 +213,16 @@ GitHub Actions exercises the native command HUD and editor under headless
 Sway, including exact selections, keyboard input, first-run initialization,
 and clipboard isolation. This does **not** establish the above Hyprland
 window-management behavior; only a real target-session QA run can do so.
+
+## Understanding command groups
+
+Command sequences such as `a t`, `a e`, and `a f` automatically create the
+`a` branch in the HUD. A group is **only an optional display name** for that
+branch: add a group whose prefix is `a` and name is `Applications` to replace
+the automatically displayed “Group a”. Groups are not executable and do not
+need to be created for commands to work. The command's **Name** is its
+visible label; **Executable** is the program to spawn; **Arguments** are
+separate argv entries, not shell syntax.
 
 ## Acceptance and remaining work
 

@@ -16,6 +16,8 @@ shortest-unique-prefix semantics.
 | `trievium commands edit` | Open native command/group editor |
 | `trievium commands validate` | Validate registry without modifying it |
 | `trievium commands config-path` | Print independent registry location |
+| `trievium commands --help` | Show command-tree usage without opening a HUD or registry |
+| `trievium commands --version` | Print the application version without opening a HUD or registry |
 
 The command registry is `$XDG_CONFIG_HOME/trievium/commands.json`, normally
 `~/.config/trievium/commands.json`. The command CLI's `--config PATH`

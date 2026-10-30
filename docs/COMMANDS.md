@@ -109,8 +109,11 @@ expressions (`hl.dsp.*`). The `expression` field must be a valid dispatcher
 expression. See [Hyprland dispatchers](https://wiki.hypr.land/configuring/core/dispatchers/).
 Focus-dependent actions must
 set `focus_original: true` (the default): the HUD captures the window originally focused
-before mapping, checks that it remains mapped, restores focus and confirms
-that focus before invoking the dispatcher. Workspace focus dispatchers use `focus_original: false`. Hyprland return codes **and** explicit `ok` responses are checked for both user-defined dispatches and Trievium's own popup focus/geometry operations; error text is never treated as success.
+before mapping, checks that it remains a mapped non-Trievium client on
+the active workspace, restores focus and confirms that focus before invoking
+the dispatcher. If the original window has moved to another workspace, the
+action fails rather than unexpectedly switching workspaces. Workspace focus
+dispatchers use `focus_original: false`. Hyprland return codes **and** explicit `ok` responses are checked for both user-defined dispatches and Trievium's own popup focus/geometry operations; error text is never treated as success.
 Commands run on worker threads, not on the egui render path. Errors leave
 the HUD visible for correction, rather than pretending success.
 
@@ -161,6 +164,10 @@ is not already claimed. Then test these cases with harmless commands:
 3. **Focus-sensitive action:** from a regular tiled window, use a reversible
    command such as fullscreen. Verify it affects that original window, **not**
    the Trievium HUD, and does not tile or rearrange other windows.
+   Also test a moved original window, if practical: move it silently to
+   another workspace while the HUD is open, then complete a focus-dependent
+   command. The HUD should report an error instead of changing workspace.
+   Restore the window to its prior workspace after the test.
 4. **Global action:** explicitly set `focus_original: false` on a workspace
    switch (for example, workspace 6). Verify the target workspace activates
    and the HUD exits without stealing focus back.

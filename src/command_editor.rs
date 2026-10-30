@@ -802,7 +802,10 @@ mod tests {
         editor.select_command(1);
         let ctx = egui::Context::default();
         let mut timestamp = 0.0;
-        let click = |editor: &mut CommandEditor, button: &'static str, ctx: &egui::Context, time: &mut f64| {
+        let click = |editor: &mut CommandEditor,
+                     button: &'static str,
+                     ctx: &egui::Context,
+                     time: &mut f64| {
             let frame = |editor: &mut CommandEditor, events: Vec<egui::Event>, time: f64| {
                 ctx.run_ui(
                     egui::RawInput {

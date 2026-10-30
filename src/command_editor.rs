@@ -25,6 +25,17 @@ struct SaveOutcome {
 type PendingSave = Arc<Mutex<Option<SaveOutcome>>>;
 type PendingReload = Arc<Mutex<Option<Result<(PathBuf, Vec<u8>, CommandConfig)>>>>;
 
+/// Each non-final line break separates argv elements. Pressing Enter after
+/// the last argument should not silently append another empty argument.
+/// Interior blank lines remain meaningful explicit empty argv elements.
+fn parse_argv_lines(text: &str) -> Vec<String> {
+    if text.is_empty() {
+        Vec::new()
+    } else {
+        text.split_terminator('\n').map(str::to_owned).collect()
+    }
+}
+
 pub struct CommandEditor {
     path: PathBuf,
     /// Stable, fully resolved destination. Atomic rename must update this
@@ -481,11 +492,7 @@ impl CommandEditor {
                         .add(egui::TextEdit::multiline(&mut self.args_text).desired_rows(2))
                         .changed()
                     {
-                        *args = if self.args_text.is_empty() {
-                            Vec::new()
-                        } else {
-                            self.args_text.split('\n').map(str::to_owned).collect()
-                        };
+                        *args = parse_argv_lines(&self.args_text);
                         self.dirty = true;
                     }
                 }
@@ -1042,6 +1049,20 @@ mod tests {
             std::thread::sleep(Duration::from_millis(20));
         }
         panic!("egui Done click did not complete the editor-to-picker transition");
+    }
+
+    #[test]
+    fn argv_lines_do_not_add_an_unintended_trailing_empty_argument() {
+        assert!(parse_argv_lines("").is_empty());
+        assert_eq!(parse_argv_lines("--title\nMy App\n"), ["--title", "My App"]);
+        assert_eq!(parse_argv_lines("--title\nMy App"), ["--title", "My App"]);
+        assert_eq!(
+            parse_argv_lines("one\n\nthree\n"),
+            ["one", "", "three"],
+            "blank interior lines must remain explicit empty argv elements"
+        );
+        assert_eq!(parse_argv_lines("\n"), [""]);
+        assert_eq!(parse_argv_lines("--title\nMy App\n\n"), ["--title", "My App", ""]);
     }
 
     #[test]

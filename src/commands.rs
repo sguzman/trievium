@@ -936,7 +936,7 @@ mod tests {
         let index = CommandIndex::compile(&config);
         let ctx = egui::Context::default();
         let mut typed = String::new();
-        let mut paint = |events: Vec<egui::Event>, time: f64| {
+        let paint = |typed: &mut String, events: Vec<egui::Event>, time: f64| {
             ctx.run_ui(
                 egui::RawInput {
                     screen_rect: Some(egui::Rect::from_min_size(
@@ -963,15 +963,15 @@ mod tests {
 
         // This injects an egui Paste event after focus is established; it does
         // not claim to test the OS clipboard/Wayland backend.
-        paint(Vec::new(), 0.0);
-        paint(vec![egui::Event::Paste("zwf".into())], 0.1);
+        paint(&mut typed, Vec::new(), 0.0);
+        paint(&mut typed, vec![egui::Event::Paste("zwf".into())], 0.1);
         assert_eq!(typed, "zwf", "egui did not deliver the paste event");
         assert_eq!(index.resolve(&typed), Resolution::Continue(String::new()));
 
         // Once the invalid input is cleared, a valid paste still resolves.
         typed.clear();
-        paint(Vec::new(), 0.2);
-        paint(vec![egui::Event::Paste("wf".into())], 0.3);
+        paint(&mut typed, Vec::new(), 0.2);
+        paint(&mut typed, vec![egui::Event::Paste("wf".into())], 0.3);
         assert_eq!(typed, "wf", "egui did not deliver the valid paste");
         assert_eq!(index.resolve(&typed), Resolution::Selected(0));
     }

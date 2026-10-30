@@ -771,7 +771,10 @@ mod tests {
         .drop_without_applying_deltas();
 
         for control in ["group_prefix", "group_name", "group_remove"] {
-            let rect = editor.test_hitboxes.get(control).expect("group control should render");
+            let rect = editor
+                .test_hitboxes
+                .get(control)
+                .expect("group control should render");
             assert!(
                 rect.min.x >= 0.0 && rect.max.x <= 400.0,
                 "{control} overflows minimum-width editor: {rect:?}"

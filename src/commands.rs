@@ -622,6 +622,9 @@ impl CommandPicker {
         if self.pending.is_some() {
             return;
         }
+        // A new attempt supersedes any error from the previous action.
+        // This also covers clicking a terminal choice without typing.
+        self.error = None;
         let result = Arc::new(Mutex::new(None));
         let sender = Arc::clone(&result);
         let action = self.config.commands[index].action.clone();
@@ -839,6 +842,7 @@ impl eframe::App for CommandPicker {
                     } else {
                         self.typed.push(key.to_ascii_lowercase());
                         self.refresh_choices();
+                        self.error = None;
                     }
                 }
             });

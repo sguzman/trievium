@@ -378,6 +378,58 @@ if [[ "$(wl-paste -n 2>/dev/null || true)" != "Brief selected" ]]; then
 fi
 echo "Wayland commands E2E passed: exact sequence executed; clipboard and items preserved."
 
+# Actual Wayland clipboard regression for the new command TextEdit. This uses
+# wl-copy plus the virtual keyboard's Ctrl+V, not an injected egui Paste event.
+# Invalid clipboard text must not execute a valid prefix; a subsequent valid
+# paste must execute the whole shortcut and exit without changing items.json.
+rm -f "$command_marker"
+./target/debug/trievium commands --config "$command_config" >"$XDG_RUNTIME_DIR/command-paste.log" 2>&1 &
+picker_pid=$!
+found=""
+for _ in $(seq 1 100); do
+  found=$(swaymsg -s "$sway_sock" -t get_tree | grep -o '"app_id": "trievium"' | head -1 || true)
+  if [[ -n "$found" ]]; then
+    break
+  fi
+  sleep 0.1
+done
+if [[ -z "$found" ]]; then
+  echo "Command HUD did not map for Wayland clipboard test" >&2
+  cat "$XDG_RUNTIME_DIR/command-paste.log" >&2
+  exit 1
+fi
+swaymsg -s "$sway_sock" '[app_id="trievium"] focus'
+sleep 0.25
+printf '%s' 'wf extra' | wl-copy
+wtype -M ctrl -k v -m ctrl
+sleep 0.3
+if [[ -e "$command_marker" ]] || ! kill -0 "$picker_pid" 2>/dev/null; then
+  echo "Invalid Wayland clipboard paste executed a shortcut or closed the HUD" >&2
+  cat "$XDG_RUNTIME_DIR/command-paste.log" >&2
+  exit 1
+fi
+# Replace any retained input with an exact valid sequence. This also confirms
+# that clipboard paste works after the editor rejects the first attempt.
+printf '%s' 'wf' | wl-copy
+wtype -M ctrl -k a -m ctrl
+wtype -M ctrl -k v -m ctrl
+for _ in $(seq 1 70); do
+  if [[ -e "$command_marker" ]]; then
+    break
+  fi
+  sleep 0.1
+done
+if [[ ! -e "$command_marker" ]]; then
+  echo "Native Ctrl+V did not execute a valid Wayland clipboard command" >&2
+  cat "$XDG_RUNTIME_DIR/command-paste.log" >&2
+  exit 1
+fi
+wait_for_picker_exit
+cmp "$config" "$XDG_RUNTIME_DIR/copy-before-commands.json"
+# Reestablish the earlier clipboard fixture for the following isolation checks.
+printf '%s' 'Brief selected' | wl-copy
+echo "Wayland command clipboard E2E passed: invalid Ctrl+V rejected, valid Ctrl+V executed."
+
 # Command-worker error regression: a missing executable must not exit the HUD
 # or leave it busy. The same picker must accept a subsequent valid shortcut.
 rm -f "$command_marker"

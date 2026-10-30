@@ -77,8 +77,7 @@ impl CommandPopupFocus {
                     .args(["-j", "activewindow"])
                     .output()
                     .is_ok_and(|output| {
-                        output.status.success()
-                            && recovery_may_refocus(original, &output.stdout)
+                        output.status.success() && recovery_may_refocus(original, &output.stdout)
                     })
             {
                 // Restore the HUD only if the failed action left the original

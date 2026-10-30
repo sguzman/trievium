@@ -7,7 +7,7 @@
 //! operate on unrelated clients.
 use serde_json::Value;
 use std::process::Command;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -15,6 +15,16 @@ use std::time::Duration;
 const APP_CLASS: &str = "trievium";
 const RETRIES: usize = 40;
 const RETRY_DELAY: Duration = Duration::from_millis(50);
+
+/// Editor-open and editor-done geometry requests launch independent workers.
+/// Serialize them and discard obsolete ones so late scheduling cannot leave
+/// the picker at editor dimensions (or vice versa).
+static RESIZE_GENERATION: AtomicU64 = AtomicU64::new(0);
+static RESIZE_GATE: Mutex<()> = Mutex::new(());
+
+fn resize_request_is_current(generation: u64, latest: &AtomicU64) -> bool {
+    latest.load(Ordering::SeqCst) == generation
+}
 
 // One named rule is updated in place on repeated launches; no growing list
 // of per-process rules, and no modification of the user's config file.
@@ -338,8 +348,20 @@ pub fn resize_own_popup(width: i32, height: i32) {
         return;
     }
     let pid = std::process::id();
+    let generation = RESIZE_GENERATION.fetch_add(1, Ordering::SeqCst).wrapping_add(1);
     thread::spawn(move || {
+        let _guard = RESIZE_GATE
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
+        if !resize_request_is_current(generation, &RESIZE_GENERATION) {
+            return;
+        }
         if let Some(address) = our_floating_window_address(pid) {
+            // Resolving the window can block behind the compositor. A newer
+            // picker/editor transition may have arrived during that query.
+            if !resize_request_is_current(generation, &RESIZE_GENERATION) {
+                return;
+            }
             let selector = format!("address:{address}");
             if let Err(error) = dispatch_lua(&format!(
                 "hl.dsp.window.resize({{ window = \"{selector}\", x = {width}, y = {height} }})"
@@ -504,6 +526,46 @@ mod tests {
             command_popup_may_configure(false, true).is_err(),
             "early action must never hide an unexpectedly tiled command HUD"
         );
+    }
+
+    #[test]
+    fn late_editor_resize_worker_cannot_override_newer_picker_request() {
+        use std::sync::mpsc;
+
+        let generation = Arc::new(AtomicU64::new(1));
+        let gate = Arc::new(Mutex::new(()));
+        let applied = Arc::new(Mutex::new(Vec::new()));
+        let held = gate.lock().unwrap();
+
+        let (ready_tx, ready_rx) = mpsc::channel();
+        let old_generation = Arc::clone(&generation);
+        let old_gate = Arc::clone(&gate);
+        let old_applied = Arc::clone(&applied);
+        let old_worker = thread::spawn(move || {
+            ready_tx.send(()).unwrap();
+            let _lock = old_gate.lock().unwrap();
+            if resize_request_is_current(1, &old_generation) {
+                old_applied.lock().unwrap().push(1);
+            }
+        });
+        ready_rx.recv().unwrap();
+
+        // A newer request supersedes the queued old worker before either
+        // can enter the serial compositor section.
+        generation.store(2, Ordering::SeqCst);
+        let next_generation = Arc::clone(&generation);
+        let next_gate = Arc::clone(&gate);
+        let next_applied = Arc::clone(&applied);
+        let new_worker = thread::spawn(move || {
+            let _lock = next_gate.lock().unwrap();
+            if resize_request_is_current(2, &next_generation) {
+                next_applied.lock().unwrap().push(2);
+            }
+        });
+        drop(held);
+        old_worker.join().unwrap();
+        new_worker.join().unwrap();
+        assert_eq!(*applied.lock().unwrap(), vec![2]);
     }
 
     #[test]

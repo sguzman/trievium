@@ -1162,9 +1162,16 @@ mod tests {
         }
         assert!(!editor.busy(), "invalid Done save did not complete");
         assert!(!editor.done_ready, "invalid registry exited the editor");
-        assert!(editor.error.is_some(), "validation failure was not displayed");
+        assert!(
+            editor.error.is_some(),
+            "validation failure was not displayed"
+        );
         assert!(editor.dirty, "failed save lost the unsaved draft");
-        assert_eq!(fs::read(&path).unwrap(), before, "failed Done modified disk");
+        assert_eq!(
+            fs::read(&path).unwrap(),
+            before,
+            "failed Done modified disk"
+        );
         assert_eq!(fs::read(&items).unwrap(), b"existing snippets");
 
         editor.config.commands[0].sequence = "a t".into();
@@ -1184,7 +1191,10 @@ mod tests {
             }
             std::thread::sleep(Duration::from_millis(20));
         }
-        assert!(completed, "corrected Done did not return to the command picker");
+        assert!(
+            completed,
+            "corrected Done did not return to the command picker"
+        );
         assert!(!editor.busy());
         assert!(!editor.dirty);
         assert!(editor.error.is_none());

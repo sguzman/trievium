@@ -380,6 +380,43 @@ echo "Wayland commands E2E passed: exact sequence executed; clipboard and items 
 # shortcut plus extraneous keys. The entire input must be rejected; no prefix
 # of the pasted text may launch a command. Follow with ordinary typed keys to
 # prove the picker stays usable and releases its instance lock on completion.
+# Positive control: prove clipboard paste actually enters the egui TextEdit.
+# Otherwise a broken Ctrl+V path would yield a false pass for invalid input.
+rm -f "$command_marker"
+printf '%s' 'w' | wl-copy
+./target/debug/trievium commands --config "$command_config" >"$XDG_RUNTIME_DIR/command-paste-control.log" 2>&1 &
+picker_pid=$!
+found=""
+for _ in $(seq 1 100); do
+  found=$(swaymsg -s "$sway_sock" -t get_tree | grep -o '"app_id": "trievium"' | head -1 || true)
+  if [[ -n "$found" ]]; then
+    break
+  fi
+  sleep 0.1
+done
+if [[ -z "$found" ]]; then
+  echo "Command HUD did not map for positive paste control" >&2
+  cat "$XDG_RUNTIME_DIR/command-paste-control.log" >&2
+  exit 1
+fi
+swaymsg -s "$sway_sock" '[app_id="trievium"] focus'
+sleep 0.2
+wtype -M ctrl -k v -m ctrl
+sleep 0.2
+wtype f
+for _ in $(seq 1 70); do
+  if [[ -e "$command_marker" ]]; then
+    break
+  fi
+  sleep 0.1
+done
+if [[ ! -e "$command_marker" ]]; then
+  echo "Clipboard paste never entered the command HUD (positive control failed)" >&2
+  cat "$XDG_RUNTIME_DIR/command-paste-control.log" >&2
+  exit 1
+fi
+wait_for_picker_exit
+# Negative control: a complete command embedded inside pasted text is unsafe.
 rm -f "$command_marker"
 printf '%s' 'zwf' | wl-copy
 if [[ "$(wl-paste -n 2>/dev/null || true)" != "zwf" ]]; then

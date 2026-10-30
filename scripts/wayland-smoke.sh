@@ -376,6 +376,62 @@ if [[ "$(wl-paste -n 2>/dev/null || true)" != "Brief selected" ]]; then
 fi
 echo "Wayland commands E2E passed: exact sequence executed; clipboard and items preserved."
 
+# Paste-safety E2E: a real Wayland clipboard paste may contain an executable
+# shortcut plus extraneous keys. The entire input must be rejected; no prefix
+# of the pasted text may launch a command. Follow with ordinary typed keys to
+# prove the picker stays usable and releases its instance lock on completion.
+rm -f "$command_marker"
+printf '%s' 'zwf' | wl-copy
+if [[ "$(wl-paste -n 2>/dev/null || true)" != "zwf" ]]; then
+  echo "Could not seed Wayland clipboard for command paste regression" >&2
+  exit 1
+fi
+./target/debug/trievium commands --config "$command_config" >"$XDG_RUNTIME_DIR/command-paste.log" 2>&1 &
+picker_pid=$!
+found=""
+for _ in $(seq 1 100); do
+  found=$(swaymsg -s "$sway_sock" -t get_tree | grep -o '"app_id": "trievium"' | head -1 || true)
+  if [[ -n "$found" ]]; then
+    break
+  fi
+  sleep 0.1
+done
+if [[ -z "$found" ]]; then
+  echo "Command HUD did not map for clipboard paste regression" >&2
+  cat "$XDG_RUNTIME_DIR/command-paste.log" >&2
+  exit 1
+fi
+swaymsg -s "$sway_sock" '[app_id="trievium"] focus'
+sleep 0.2
+wtype -M ctrl -k v -m ctrl
+sleep 0.35
+if [[ -e "$command_marker" ]] || ! kill -0 "$picker_pid" 2>/dev/null; then
+  echo "Clipboard paste with extra characters executed a command or closed the HUD" >&2
+  cat "$XDG_RUNTIME_DIR/command-paste.log" >&2
+  exit 1
+fi
+wtype w
+wtype f
+for _ in $(seq 1 70); do
+  if [[ -e "$command_marker" ]]; then
+    break
+  fi
+  sleep 0.1
+done
+if [[ ! -e "$command_marker" ]]; then
+  echo "Command HUD did not recover to a valid typed shortcut after invalid paste" >&2
+  cat "$XDG_RUNTIME_DIR/command-paste.log" >&2
+  exit 1
+fi
+wait_for_picker_exit
+cmp "$config" "$XDG_RUNTIME_DIR/copy-before-commands.json"
+printf '%s' 'Brief selected' | wl-copy
+if [[ "$(wl-paste -n 2>/dev/null || true)" != "Brief selected" ]]; then
+  echo "Could not restore the original test clipboard after paste regression" >&2
+  exit 1
+fi
+echo "Wayland command paste E2E passed: invalid clipboard content never executed; normal keys recovered."
+
 
 # Native command editor is independently launchable and Escape must not
 # modify the command registry (or the copy library).

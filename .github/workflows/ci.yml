@@ -23,7 +23,14 @@ jobs:
       - name: Validate locked dependency graph
         run: cargo metadata --locked --no-deps --format-version 1 > /dev/null
       - name: Tests
-        run: cargo test --locked
+        run: |
+          if ! cargo test --locked; then
+            echo "::group::Proposed lockfile delta (diagnostic only)"
+            cargo metadata --format-version 1 > /dev/null
+            git diff -- Cargo.lock
+            echo "::endgroup::"
+            exit 1
+          fi
       - name: Clippy
         run: cargo clippy --locked --all-targets -- -D warnings
       - name: CLI smoke test

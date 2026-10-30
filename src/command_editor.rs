@@ -1,6 +1,8 @@
 //! Native command-tree editor with independent, conflict-safe persistence.
 //! Never accesses the prefix-copy item library.
+use crate::colors;
 use crate::commands::{Action, CommandConfig, CommandEntry, Group};
+use crate::manager::Manager;
 use anyhow::{Context, Result, bail};
 use eframe::egui;
 use std::fs;
@@ -344,7 +346,16 @@ impl CommandEditor {
         }
     }
 
+    /// Keep the command editor in the same padded visual frame as the
+    /// original Trievium manager. All input fields share its outlined frame.
     pub fn ui(&mut self, ui: &mut egui::Ui) -> EditorEvent {
+        egui::Frame::NONE
+            .inner_margin(egui::Margin::same(24))
+            .show(ui, |ui| self.ui_content(ui))
+            .inner
+    }
+
+    fn ui_content(&mut self, ui: &mut egui::Ui) -> EditorEvent {
         self.poll_save(ui.ctx());
         self.poll_reload(ui.ctx());
         if self.done_ready {
@@ -356,8 +367,8 @@ impl CommandEditor {
         let mut close = false;
         let can_modify = self.pending.is_none() && self.pending_reload.is_none();
         ui.horizontal(|ui| {
-            ui.heading("Edit command tree");
-            ui.separator();
+            ui.heading("Trievium");
+            ui.label(egui::RichText::new("Commands").weak());
             save = ui
                 .add_enabled(can_modify, egui::Button::new("Save"))
                 .clicked();
@@ -426,8 +437,10 @@ impl CommandEditor {
             return EditorEvent::Stay;
         }
 
+        ui.add_space(12.0);
         ui.separator();
-        ui.horizontal(|ui| {
+        ui.add_space(10.0);
+        ui.horizontal_wrapped(|ui| {
             ui.heading("Commands");
             if ui.button("New").clicked() {
                 self.config.commands.push(CommandEntry {
@@ -463,19 +476,29 @@ impl CommandEditor {
         });
 
         let mut chosen = None;
+        ui.add_space(8.0);
         egui::ScrollArea::vertical()
             .id_salt("command-library")
-            .max_height(140.0)
-            .show_rows(ui, 30.0, self.config.commands.len(), |ui, rows| {
+            .max_height(170.0)
+            .show_rows(ui, 34.0, self.config.commands.len(), |ui, rows| {
                 ui.spacing_mut().item_spacing.y = 0.0;
                 for index in rows {
                     let entry = &self.config.commands[index];
                     ui.horizontal(|ui| {
-                        ui.set_min_height(30.0);
+                        ui.set_min_height(34.0);
+                        let accent = colors::for_label(&entry.label, None);
+                        let (rect, _) = ui.allocate_exact_size(
+                            egui::vec2(8.0, 24.0),
+                            egui::Sense::hover(),
+                        );
+                        ui.painter().rect_filled(rect, egui::CornerRadius::same(3), accent);
                         if ui
-                            .selectable_label(
-                                self.selected == Some(index),
-                                format!("{}  ·  {}", entry.sequence, entry.label),
+                            .add_sized(
+                                [ui.available_width().max(180.0), 30.0],
+                                egui::Button::selectable(
+                                    self.selected == Some(index),
+                                    format!("{}  ·  {}", entry.sequence, entry.label),
+                                ),
                             )
                             .clicked()
                         {
@@ -490,13 +513,31 @@ impl CommandEditor {
         if let Some(index) = self.selected
             && let Some(entry) = self.config.commands.get_mut(index)
         {
+            ui.add_space(12.0);
             ui.separator();
-            ui.horizontal(|ui| {
-                ui.label("Sequence");
-                self.dirty |= ui.text_edit_singleline(&mut entry.sequence).changed();
-                ui.label("Label");
-                self.dirty |= ui.text_edit_singleline(&mut entry.label).changed();
+            ui.add_space(10.0);
+            ui.label("Shortcut sequence (e.g. a t)");
+            Manager::input_frame(ui, |ui| {
+                self.dirty |= ui
+                    .add(
+                        egui::TextEdit::singleline(&mut entry.sequence)
+                            .frame(egui::Frame::NONE)
+                            .desired_width(ui.available_width().max(160.0)),
+                    )
+                    .changed();
             });
+            ui.add_space(12.0);
+            ui.label("Name");
+            Manager::input_frame(ui, |ui| {
+                self.dirty |= ui
+                    .add(
+                        egui::TextEdit::singleline(&mut entry.label)
+                            .frame(egui::Frame::NONE)
+                            .desired_width(ui.available_width().max(160.0)),
+                    )
+                    .changed();
+            });
+            ui.add_space(12.0);
             let is_exec = matches!(entry.action, Action::Exec { .. });
             ui.horizontal(|ui| {
                 if ui.radio(is_exec, "Program").clicked() && !is_exec {
@@ -520,9 +561,16 @@ impl CommandEditor {
             });
             match &mut entry.action {
                 Action::Exec { program, args } => {
-                    ui.horizontal(|ui| {
-                        ui.label("Executable");
-                        self.dirty |= ui.text_edit_singleline(program).changed();
+                    ui.add_space(12.0);
+                    ui.label("Executable (program, not a shell command)");
+                    Manager::input_frame(ui, |ui| {
+                        self.dirty |= ui
+                            .add(
+                                egui::TextEdit::singleline(program)
+                                    .frame(egui::Frame::NONE)
+                                    .desired_width(ui.available_width().max(160.0)),
+                            )
+                            .changed();
                     });
                     if self.argv_has_newline {
                         ui.label(
@@ -530,22 +578,39 @@ impl CommandEditor {
                              Its argv is preserved; edit it directly in commands.json.",
                         );
                     } else {
+                        ui.add_space(12.0);
                         ui.label("Arguments (one argv element per line; no shell)");
-                        if ui
-                            .add(egui::TextEdit::multiline(&mut self.args_text).desired_rows(2))
-                            .changed()
-                        {
-                            *args = parse_argv_lines(&self.args_text);
-                            self.dirty = true;
-                        }
+                        Manager::input_frame(ui, |ui| {
+                            if ui
+                                .add(
+                                    egui::TextEdit::multiline(&mut self.args_text)
+                                        .frame(egui::Frame::NONE)
+                                        .desired_rows(3)
+                                        .desired_width(ui.available_width().max(160.0)),
+                                )
+                                .changed()
+                            {
+                                *args = parse_argv_lines(&self.args_text);
+                                self.dirty = true;
+                            }
+                        });
                     }
                 }
                 Action::Hyprland {
                     expression,
                     focus_original,
                 } => {
+                    ui.add_space(12.0);
                     ui.label("Hyprland 0.55+ Lua dispatcher (hl.dsp.*)");
-                    self.dirty |= ui.text_edit_singleline(expression).changed();
+                    Manager::input_frame(ui, |ui| {
+                        self.dirty |= ui
+                            .add(
+                                egui::TextEdit::singleline(expression)
+                                    .frame(egui::Frame::NONE)
+                                    .desired_width(ui.available_width().max(160.0)),
+                            )
+                            .changed();
+                    });
                     self.dirty |= ui
                         .checkbox(
                             focus_original,
@@ -556,8 +621,10 @@ impl CommandEditor {
             }
         }
 
+        ui.add_space(16.0);
         ui.separator();
-        ui.horizontal(|ui| {
+        ui.add_space(10.0);
+        ui.horizontal_wrapped(|ui| {
             ui.heading("Groups");
             if ui.button("New group").clicked() {
                 self.config.groups.push(Group {
@@ -567,27 +634,39 @@ impl CommandEditor {
                 self.dirty = true;
             }
         });
-        ui.label("Optional labels for a command-prefix branch, such as w = Windows.");
+        ui.label("Groups name shortcut prefixes, not commands. For a t and a e, prefix a is a group; name it Applications if you want.");
         let mut remove_group = None;
         let mut move_group = None;
         let group_count = self.config.groups.len();
         egui::ScrollArea::vertical()
             .id_salt("command-groups")
-            .max_height(160.0)
-            .show_rows(ui, 34.0, self.config.groups.len(), |ui, rows| {
+            .max_height(190.0)
+            .show_rows(ui, 48.0, self.config.groups.len(), |ui, rows| {
                 ui.spacing_mut().item_spacing.y = 0.0;
                 for index in rows {
                     let group = &mut self.config.groups[index];
                     ui.horizontal(|ui| {
-                        ui.set_min_height(34.0);
+                        ui.set_min_height(46.0);
                         ui.label("Prefix");
-                        self.dirty |= ui
-                            .add(egui::TextEdit::singleline(&mut group.prefix).desired_width(75.0))
-                            .changed();
-                        ui.label("Label");
-                        self.dirty |= ui
-                            .add(egui::TextEdit::singleline(&mut group.label).desired_width(210.0))
-                            .changed();
+                        Manager::input_frame(ui, |ui| {
+                            self.dirty |= ui
+                                .add(
+                                    egui::TextEdit::singleline(&mut group.prefix)
+                                        .frame(egui::Frame::NONE)
+                                        .desired_width(75.0),
+                                )
+                                .changed();
+                        });
+                        ui.label("Name");
+                        Manager::input_frame(ui, |ui| {
+                            self.dirty |= ui
+                                .add(
+                                    egui::TextEdit::singleline(&mut group.label)
+                                        .frame(egui::Frame::NONE)
+                                        .desired_width(210.0),
+                                )
+                                .changed();
+                        });
                         if ui.add_enabled(index > 0, egui::Button::new("Up")).clicked() {
                             move_group = Some((index, index - 1));
                         }

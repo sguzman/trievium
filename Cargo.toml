@@ -8,7 +8,7 @@ repository = "https://github.com/sguzman/trievium"
 
 [dependencies]
 anyhow = "1"
-eframe = { version = "=0.37.0", default-features = false, features = ["default_fonts", "glow", "wayland", "x11"] }
+eframe = { version = "=0.37.0", default-features = false, features = ["default_fonts", "glow", "wayland", "x11", "clipboard"] }
 egui_system_font_provider = "=0.37.0"
 zbus = "5"
 serde = { version = "1", features = ["derive"] }

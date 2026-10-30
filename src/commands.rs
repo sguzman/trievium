@@ -800,7 +800,7 @@ impl eframe::App for CommandPicker {
             return;
         }
         egui::Frame::NONE
-            .inner_margin(egui::Margin::symmetric(18, 10))
+            .inner_margin(egui::Margin::symmetric(24, 14))
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
                     ui.heading("Trievium / Commands");

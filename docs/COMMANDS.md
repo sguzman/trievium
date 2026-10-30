@@ -115,7 +115,11 @@ the dispatcher. If the original window has moved to another workspace, the
 action fails rather than unexpectedly switching workspaces. Workspace focus
 dispatchers use `focus_original: false`. Hyprland return codes **and** explicit `ok` responses are checked for both user-defined dispatches and Trievium's own popup focus/geometry operations; error text is never treated as success.
 Commands run on worker threads, not on the egui render path. Errors leave
-the HUD visible for correction, rather than pretending success.
+the HUD open for correction, rather than pretending success. Failed actions
+restore HUD keyboard focus only if the original window is still active:
+if the user switched to another application, recovery does not steal focus.
+A delayed initial-map worker is permanently disarmed after the first action,
+even when that action fails.
 
 
 ## Local Hyprland QA before acceptance
@@ -184,6 +188,8 @@ is not already claimed. Then test these cases with harmless commands:
    closing or remaining busy. Without relaunching the HUD, type a working
    shortcut and confirm it runs and the HUD closes. The headless Wayland
    regression covers the recovery path; the actual error display still needs
+   When testing a delayed failure, verify the HUD does not steal focus
+   from another window that the user focused during the action.
    desktop confirmation.
 7. **Regression:** launch the *original* `trievium` copy HUD, select a
    snippet, paste it, and verify it is unchanged. Confirm

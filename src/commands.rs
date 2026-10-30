@@ -618,7 +618,7 @@ impl CommandPicker {
         ctx.request_repaint_after(Duration::from_millis(20));
     }
 
-    fn choose(&mut self, index: usize) {
+    fn choose(&mut self, index: usize, ctx: &egui::Context) {
         if self.pending.is_some() {
             return;
         }
@@ -640,11 +640,15 @@ impl CommandPicker {
                 *slot = Some(outcome);
             }
         });
+        // The launch event can be the last input event. Request the first
+        // pending-result poll explicitly instead of relying on an incidental
+        // redraw to start the existing 20ms polling loop in logic().
+        ctx.request_repaint_after(Duration::from_millis(20));
     }
 
-    fn accept(&mut self) {
+    fn accept(&mut self, ctx: &egui::Context) {
         match self.command_index.resolve(&self.typed) {
-            Resolution::Selected(index) => self.choose(index),
+            Resolution::Selected(index) => self.choose(index, ctx),
             Resolution::Continue(prefix) => {
                 self.typed = prefix.to_ascii_lowercase();
                 self.refresh_choices();
@@ -788,7 +792,7 @@ impl eframe::App for CommandPicker {
                             field.request_focus();
                         }
                         if field.changed() {
-                            self.accept();
+                            self.accept(ui.ctx());
                         }
                     });
                 });
@@ -831,7 +835,7 @@ impl eframe::App for CommandPicker {
                     });
                 if let Some((key, terminal)) = clicked {
                     if let Some(index) = terminal {
-                        self.choose(index);
+                        self.choose(index, ui.ctx());
                     } else {
                         self.typed.push(key.to_ascii_lowercase());
                         self.refresh_choices();

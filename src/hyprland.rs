@@ -335,10 +335,10 @@ pub fn focused_window_before_popup() -> Option<String> {
     active_window_address(&output.stdout)
 }
 
-/// A focus-dependent action must never target the command HUD or a client
-/// with incomplete/malformed identity. Verify an actual mapped non-Trievium
-/// client address before even attempting the focus dispatcher.
-fn original_window_is_safe(clients_json: &[u8], address: &str) -> bool {
+/// A focus-dependent action must never target the command HUD, a client
+/// with incomplete identity, or a window moved to another workspace.
+/// Otherwise refocusing it could unexpectedly change the active workspace.
+fn original_window_is_safe(clients_json: &[u8], address: &str, workspace: i64) -> bool {
     if !valid_address(address) {
         return false;
     }
@@ -349,10 +349,20 @@ fn original_window_is_safe(clients_json: &[u8], address: &str) -> bool {
         client.get("address").and_then(Value::as_str) == Some(address)
             && client.get("mapped").and_then(Value::as_bool) == Some(true)
             && client
+                .get("workspace")
+                .and_then(|value| value.get("id"))
+                .and_then(Value::as_i64)
+                == Some(workspace)
+            && client
                 .get("class")
                 .and_then(Value::as_str)
                 .is_some_and(|class| !class.is_empty() && class != APP_CLASS)
     })
+}
+
+fn active_workspace_id(bytes: &[u8]) -> Option<i64> {
+    let value: Value = serde_json::from_slice(bytes).ok()?;
+    value.get("id")?.as_i64()
 }
 
 /// Refocus only the window captured before the popup was mapped. Do not
@@ -369,9 +379,18 @@ pub fn restore_original_focus(address: &str) -> Result<(), String> {
     if !output.status.success() {
         return Err("Unable to verify original Hyprland window".into());
     }
-    if !original_window_is_safe(&output.stdout, address) {
+    let workspace_output = Command::new("hyprctl")
+        .args(["-j", "activeworkspace"])
+        .output()
+        .map_err(|error| format!("Checking active workspace: {error}"))?;
+    if !workspace_output.status.success() {
+        return Err("Unable to verify active Hyprland workspace".into());
+    }
+    let workspace = active_workspace_id(&workspace_output.stdout)
+        .ok_or("Unable to identify active Hyprland workspace")?;
+    if !original_window_is_safe(&output.stdout, address, workspace) {
         return Err(
-            "The original window is no longer mapped or is not a trusted non-Trievium client"
+            "Original window is no longer mapped, is not trusted, or moved to another workspace; refusing to switch workspaces"
                 .into(),
         );
     }
@@ -460,22 +479,39 @@ mod tests {
     }
 
     #[test]
-    fn original_focus_requires_mapped_identified_non_popup_client() {
+    fn original_focus_requires_mapped_identified_client_on_active_workspace() {
         let clients = br#"[
-            {"address":"0x100","class":"kitty","mapped":true},
-            {"address":"0x200","class":"trievium","mapped":true},
-            {"address":"0x300","class":"kitty","mapped":false},
-            {"address":"0x400","mapped":true},
-            {"address":"0x500","class":"","mapped":true},
-            {"address":"0x600","class":"firefox","mapped":true}
+            {"address":"0x100","class":"kitty","mapped":true,"workspace":{"id":3}},
+            {"address":"0x200","class":"trievium","mapped":true,"workspace":{"id":3}},
+            {"address":"0x300","class":"kitty","mapped":false,"workspace":{"id":3}},
+            {"address":"0x400","mapped":true,"workspace":{"id":3}},
+            {"address":"0x500","class":"","mapped":true,"workspace":{"id":3}},
+            {"address":"0x600","class":"firefox","mapped":true,"workspace":{"id":5}},
+            {"address":"0x700","class":"kitty","mapped":true},
+            {"address":"0x800","class":"kitty","mapped":true,"workspace":{"id":"3"}}
         ]"#;
-        assert!(original_window_is_safe(clients, "0x100"));
-        assert!(original_window_is_safe(clients, "0x600"));
-        for address in ["0x200", "0x300", "0x400", "0x500", "0x700", "garbage"] {
-            assert!(!original_window_is_safe(clients, address), "{address}");
+        assert!(original_window_is_safe(clients, "0x100", 3));
+        assert!(original_window_is_safe(clients, "0x600", 5));
+        for address in ["0x200", "0x300", "0x400", "0x500", "0x600", "0x700", "0x800", "0x900", "garbage"] {
+            assert!(
+                !original_window_is_safe(clients, address, 3),
+                "Unsafe client {address}"
+            );
         }
-        assert!(!original_window_is_safe(b"not json", "0x100"));
-        assert!(!original_window_is_safe(br#"{"address":"0x100"}"#, "0x100"));
+        assert!(!original_window_is_safe(b"not json", "0x100", 3));
+        assert!(!original_window_is_safe(br#"{"address":"0x100"}"#, "0x100", 3));
+        // Hyprland special workspace IDs can be negative.
+        let special = br#"[{"address":"0xabc","class":"kitty","mapped":true,"workspace":{"id":-99}}]"#;
+        assert!(original_window_is_safe(special, "0xabc", -99));
+    }
+
+    #[test]
+    fn workspace_identity_must_be_explicit_and_numeric() {
+        assert_eq!(active_workspace_id(br#"{"id":3,"name":"3"}"#), Some(3));
+        assert_eq!(active_workspace_id(br#"{"id":-99,"name":"special"}"#), Some(-99));
+        assert_eq!(active_workspace_id(br#"{"id":"3"}"#), None);
+        assert_eq!(active_workspace_id(br#"{"name":"3"}"#), None);
+        assert_eq!(active_workspace_id(b"not json"), None);
     }
 
     #[test]

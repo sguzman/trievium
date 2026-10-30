@@ -384,6 +384,10 @@ echo "Wayland commands E2E passed: exact sequence executed; clipboard and items 
 # Otherwise a broken Ctrl+V path would yield a false pass for invalid input.
 rm -f "$command_marker"
 printf '%s' 'w' | wl-copy
+if [[ "$(wl-paste -n 2>/dev/null || true)" != "w" ]]; then
+  echo "Positive paste control: Wayland clipboard was not seeded" >&2
+  exit 1
+fi
 ./target/debug/trievium commands --config "$command_config" >"$XDG_RUNTIME_DIR/command-paste-control.log" 2>&1 &
 picker_pid=$!
 found=""
@@ -401,7 +405,7 @@ if [[ -z "$found" ]]; then
 fi
 swaymsg -s "$sway_sock" '[app_id="trievium"] focus'
 sleep 0.2
-wtype -M ctrl -k v -m ctrl
+wtype -M ctrl -s 100 -k v -s 100 -m ctrl
 sleep 0.2
 wtype f
 for _ in $(seq 1 70); do
@@ -440,7 +444,7 @@ if [[ -z "$found" ]]; then
 fi
 swaymsg -s "$sway_sock" '[app_id="trievium"] focus'
 sleep 0.2
-wtype -M ctrl -k v -m ctrl
+wtype -M ctrl -s 100 -k v -s 100 -m ctrl
 sleep 0.35
 if [[ -e "$command_marker" ]] || ! kill -0 "$picker_pid" 2>/dev/null; then
   echo "Clipboard paste with extra characters executed a command or closed the HUD" >&2

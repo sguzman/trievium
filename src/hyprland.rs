@@ -348,7 +348,9 @@ pub fn resize_own_popup(width: i32, height: i32) {
         return;
     }
     let pid = std::process::id();
-    let generation = RESIZE_GENERATION.fetch_add(1, Ordering::SeqCst).wrapping_add(1);
+    let generation = RESIZE_GENERATION
+        .fetch_add(1, Ordering::SeqCst)
+        .wrapping_add(1);
     thread::spawn(move || {
         let _guard = RESIZE_GATE
             .lock()

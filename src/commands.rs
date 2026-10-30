@@ -15,6 +15,9 @@ use crate::command_editor::{CommandEditor, EditorEvent};
 use crate::hyprland;
 
 const MAX_SEQUENCE: usize = 12;
+// The config limit counts alphanumeric keys, not separators. A 12-key
+// sequence written with one space between each key occupies 23 characters.
+const MAX_TYPED_CHARS: usize = MAX_SEQUENCE * 2 - 1;
 const ROW_HEIGHT: f32 = 38.0;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -779,7 +782,7 @@ impl eframe::App for CommandPicker {
                         let field = ui.add(
                             egui::TextEdit::singleline(&mut self.typed)
                                 .desired_width(135.0)
-                                .char_limit(MAX_SEQUENCE),
+                                .char_limit(MAX_TYPED_CHARS),
                         );
                         if !field.has_focus() {
                             field.request_focus();
@@ -951,7 +954,7 @@ mod tests {
                     let field = ui.add(
                         egui::TextEdit::singleline(typed)
                             .desired_width(135.0)
-                            .char_limit(MAX_SEQUENCE),
+                            .char_limit(MAX_TYPED_CHARS),
                     );
                     if !field.has_focus() {
                         field.request_focus();
@@ -974,6 +977,26 @@ mod tests {
         paint(&mut typed, vec![egui::Event::Paste("wf".into())], 0.3);
         assert_eq!(typed, "wf", "egui did not deliver the valid paste");
         assert_eq!(index.resolve(&typed), Resolution::Selected(0));
+
+        // Twelve normalized keys are valid even when written with one space
+        // between each key. The TextEdit must not truncate the 23-char input.
+        let spaced = "a b c d e f g h i j k l";
+        let mut long_config = CommandConfig::empty();
+        long_config.commands.push(CommandEntry {
+            sequence: spaced.into(),
+            label: "Long spaced shortcut".into(),
+            action: Action::Exec {
+                program: "true".into(),
+                args: Vec::new(),
+            },
+        });
+        long_config.validate().unwrap();
+        let long_index = CommandIndex::compile(&long_config);
+        typed.clear();
+        paint(&mut typed, Vec::new(), 0.4);
+        paint(&mut typed, vec![egui::Event::Paste(spaced.into())], 0.5);
+        assert_eq!(typed, spaced, "TextEdit truncated a valid 12-key sequence");
+        assert_eq!(long_index.resolve(&typed), Resolution::Selected(0));
     }
 
     #[test]

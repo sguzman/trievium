@@ -668,13 +668,15 @@ impl CommandPicker {
     }
 }
 
-// Single-line TextEdit can transform pasted control characters. Inspect the
-// original paste event before accepting a resolved shortcut, so pasted tabs,
-// line breaks, punctuation and invisible Unicode never become valid commands.
-fn has_unsupported_paste(events: &[egui::Event]) -> bool {
+// Single-line TextEdit can truncate or transform a paste. A transformed
+// prefix must not become an executable shortcut, even when extra separator
+// spaces allow a valid command longer than the normal 23-character display.
+fn has_unsupported_paste(events: &[egui::Event], retained: &str) -> bool {
     events.iter().any(|event| {
         matches!(event, egui::Event::Paste(text)
-            if !text.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b' '))
+            if text.len() > MAX_TYPED_CHARS
+                || !text.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b' ')
+                || !retained.contains(text))
     })
 }
 
@@ -812,7 +814,7 @@ impl eframe::App for CommandPicker {
                             field.request_focus();
                         }
                         if field.changed() {
-                            if ui.input(|input| has_unsupported_paste(&input.events)) {
+                            if ui.input(|input| has_unsupported_paste(&input.events, &self.typed)) {
                                 self.typed.clear();
                                 self.refresh_choices();
                                 self.error = Some(
@@ -996,16 +998,29 @@ mod tests {
     fn pasted_control_characters_cannot_be_sanitized_into_a_command() {
         for pasted in ["w f\n", "w f\r", "w\tf", "wf!", "wf\u{200b}"] {
             assert!(
-                has_unsupported_paste(&[egui::Event::Paste(pasted.into())]),
+                has_unsupported_paste(&[egui::Event::Paste(pasted.into())], pasted),
                 "Unsafe pasted input was accepted: {pasted:?}"
             );
         }
         for pasted in ["wf", "w f", "A 1 2"] {
             assert!(
-                !has_unsupported_paste(&[egui::Event::Paste(pasted.into())]),
+                !has_unsupported_paste(&[egui::Event::Paste(pasted.into())], pasted),
                 "Valid pasted input was blocked: {pasted:?}"
             );
         }
+    }
+
+    #[test]
+    fn a_truncated_extra_space_paste_cannot_resolve_to_a_valid_shortcut() {
+        // Unlike a one-space sequence, this valid representation occupies
+        // every character in the field including the overflow sentinel.
+        let valid = "a b c d e f g h i j k  l";
+        assert_eq!(valid.len(), MAX_TYPED_CHARS);
+        let oversized = format!("{valid}EXTRA");
+        assert!(has_unsupported_paste(
+            &[egui::Event::Paste(oversized)],
+            valid
+        ));
     }
 
     #[test]
@@ -1092,6 +1107,10 @@ mod tests {
             long_index.resolve(&typed),
             Resolution::Continue(String::new())
         );
+        assert!(has_unsupported_paste(
+            &[egui::Event::Paste(format!("{spaced}EXTRA"))],
+            &typed
+        ));
     }
 
     #[test]

@@ -15,9 +15,10 @@ use crate::command_editor::{CommandEditor, EditorEvent};
 use crate::hyprland;
 
 const MAX_SEQUENCE: usize = 12;
-// The config limit counts alphanumeric keys, not separators. A 12-key
-// sequence written with one space between each key occupies 23 characters.
-const MAX_TYPED_CHARS: usize = MAX_SEQUENCE * 2 - 1;
+// Twelve keys with one space between each occupy 23 characters. Reserve
+// one extra character so TextEdit cannot truncate an oversized paste *to*
+// an otherwise valid maximum-length shortcut and accidentally execute it.
+const MAX_TYPED_CHARS: usize = MAX_SEQUENCE * 2;
 const ROW_HEIGHT: f32 = 38.0;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -1038,6 +1039,22 @@ mod tests {
         paint(&mut typed, vec![egui::Event::Paste(spaced.into())], 0.5);
         assert_eq!(typed, spaced, "TextEdit truncated a valid 12-key sequence");
         assert_eq!(long_index.resolve(&typed), Resolution::Selected(0));
+
+        // Before the sentinel slot, TextEdit's exact 23-character cap could
+        // truncate a longer paste into this valid 23-character command and
+        // launch it. Keep one excess character so the reducer rejects it.
+        typed.clear();
+        paint(&mut typed, Vec::new(), 0.6);
+        paint(
+            &mut typed,
+            vec![egui::Event::Paste(format!("{spaced}EXTRA"))],
+            0.7,
+        );
+        assert!(
+            typed.len() > spaced.len(),
+            "TextEdit silently truncated the oversized paste to a valid command"
+        );
+        assert_eq!(long_index.resolve(&typed), Resolution::Continue(String::new()));
     }
 
     #[test]

@@ -507,10 +507,14 @@ impl CommandEditor {
                     ui.horizontal(|ui| {
                         ui.set_min_height(34.0);
                         let accent = colors::for_label(&entry.label, None);
+                        // Use the original Trievium picker marker geometry
+                        // rather than a thin stripe in the command editor.
                         let (rect, _) =
-                            ui.allocate_exact_size(egui::vec2(8.0, 24.0), egui::Sense::hover());
+                            ui.allocate_exact_size(egui::vec2(22.0, 24.0), egui::Sense::hover());
+                        #[cfg(test)]
+                        self.test_hitboxes.insert("command_accent", rect);
                         ui.painter()
-                            .rect_filled(rect, egui::CornerRadius::same(3), accent);
+                            .rect_filled(rect, egui::CornerRadius::same(5), accent);
                         if ui
                             .add_sized(
                                 [ui.available_width().max(180.0), 30.0],
@@ -770,16 +774,27 @@ mod tests {
         )
         .drop_without_applying_deltas();
 
-        for control in ["group_prefix", "group_name", "group_remove"] {
+        for control in [
+            "group_prefix",
+            "group_name",
+            "group_remove",
+            "command_accent",
+        ] {
             let rect = editor
                 .test_hitboxes
                 .get(control)
-                .expect("group control should render");
+                .expect("editor control should render");
             assert!(
                 rect.min.x >= 0.0 && rect.max.x <= 400.0,
                 "{control} overflows minimum-width editor: {rect:?}"
             );
         }
+        let marker = editor.test_hitboxes["command_accent"];
+        assert_eq!(
+            marker.size(),
+            egui::vec2(22.0, 24.0),
+            "command editor marker should match the original copy picker"
+        );
         fs::remove_dir_all(dir).unwrap();
     }
 

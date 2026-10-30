@@ -376,6 +376,7 @@ if [[ "$(wl-paste -n 2>/dev/null || true)" != "Brief selected" ]]; then
 fi
 echo "Wayland commands E2E passed: exact sequence executed; clipboard and items preserved."
 
+
 # Native command editor is independently launchable and Escape must not
 # modify the command registry (or the copy library).
 cp "$command_config" "$XDG_RUNTIME_DIR/commands-before-editor.json"

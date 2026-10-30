@@ -668,15 +668,18 @@ impl CommandPicker {
     }
 }
 
-// Single-line TextEdit can truncate or transform a paste. A transformed
-// prefix must not become an executable shortcut, even when extra separator
-// spaces allow a valid command longer than the normal 23-character display.
-fn has_unsupported_paste(events: &[egui::Event], retained: &str) -> bool {
+// Single-line TextEdit can truncate or transform text from the clipboard or
+// an input method. Check the original event before shortcut resolution so an
+// altered prefix cannot accidentally become an executable shortcut.
+fn has_transformed_text_input(events: &[egui::Event], retained: &str) -> bool {
     events.iter().any(|event| {
-        matches!(event, egui::Event::Paste(text)
-            if text.len() > MAX_TYPED_CHARS
-                || !text.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b' ')
-                || !retained.contains(text))
+        let text = match event {
+            egui::Event::Paste(text) | egui::Event::Text(text) => text,
+            _ => return false,
+        };
+        text.len() > MAX_TYPED_CHARS
+            || !text.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b' ')
+            || !retained.contains(text)
     })
 }
 
@@ -814,11 +817,11 @@ impl eframe::App for CommandPicker {
                             field.request_focus();
                         }
                         if field.changed() {
-                            if ui.input(|input| has_unsupported_paste(&input.events, &self.typed)) {
+                            if ui.input(|input| has_transformed_text_input(&input.events, &self.typed)) {
                                 self.typed.clear();
                                 self.refresh_choices();
                                 self.error = Some(
-                                    "Paste accepts only ASCII letters, digits and spaces".into(),
+                                    "Input was truncated or contains unsupported characters".into(),
                                 );
                             } else {
                                 self.accept(ui.ctx());
@@ -998,13 +1001,13 @@ mod tests {
     fn pasted_control_characters_cannot_be_sanitized_into_a_command() {
         for pasted in ["w f\n", "w f\r", "w\tf", "wf!", "wf\u{200b}"] {
             assert!(
-                has_unsupported_paste(&[egui::Event::Paste(pasted.into())], pasted),
+                has_transformed_text_input(&[egui::Event::Paste(pasted.into())], pasted),
                 "Unsafe pasted input was accepted: {pasted:?}"
             );
         }
         for pasted in ["wf", "w f", "A 1 2"] {
             assert!(
-                !has_unsupported_paste(&[egui::Event::Paste(pasted.into())], pasted),
+                !has_transformed_text_input(&[egui::Event::Paste(pasted.into())], pasted),
                 "Valid pasted input was blocked: {pasted:?}"
             );
         }
@@ -1017,8 +1020,37 @@ mod tests {
         let valid = "a b c d e f g h i j k  l";
         assert_eq!(valid.len(), MAX_TYPED_CHARS);
         let oversized = format!("{valid}EXTRA");
-        assert!(has_unsupported_paste(
+        assert!(has_transformed_text_input(
             &[egui::Event::Paste(oversized)],
+            valid
+        ));
+    }
+
+    #[test]
+    fn input_method_text_cannot_be_truncated_into_a_shortcut() {
+        // Keyboard input may arrive as Event::Text, not Event::Paste.
+        // Two ordinary typed keys in one frame must remain accepted.
+        assert!(!has_transformed_text_input(
+            &[
+                egui::Event::Text("w".into()),
+                egui::Event::Text("f".into()),
+            ],
+            "wf",
+        ));
+        assert!(!has_transformed_text_input(
+            &[egui::Event::Text("w f".into())],
+            "w f",
+        ));
+        for input in ["wf\n", "wf\t", "wf!", "wf\u{200b}"] {
+            assert!(
+                has_transformed_text_input(&[egui::Event::Text(input.into())], "wf"),
+                "Unsafe input method text was accepted: {input:?}"
+            );
+        }
+        let valid = "a b c d e f g h i j k  l";
+        assert_eq!(valid.len(), MAX_TYPED_CHARS);
+        assert!(has_transformed_text_input(
+            &[egui::Event::Text(format!("{valid}EXTRA"))],
             valid
         ));
     }
@@ -1107,7 +1139,7 @@ mod tests {
             long_index.resolve(&typed),
             Resolution::Continue(String::new())
         );
-        assert!(has_unsupported_paste(
+        assert!(has_transformed_text_input(
             &[egui::Event::Paste(format!("{spaced}EXTRA"))],
             &typed
         ));

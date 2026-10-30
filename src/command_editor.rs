@@ -487,11 +487,10 @@ impl CommandEditor {
                     ui.horizontal(|ui| {
                         ui.set_min_height(34.0);
                         let accent = colors::for_label(&entry.label, None);
-                        let (rect, _) = ui.allocate_exact_size(
-                            egui::vec2(8.0, 24.0),
-                            egui::Sense::hover(),
-                        );
-                        ui.painter().rect_filled(rect, egui::CornerRadius::same(3), accent);
+                        let (rect, _) =
+                            ui.allocate_exact_size(egui::vec2(8.0, 24.0), egui::Sense::hover());
+                        ui.painter()
+                            .rect_filled(rect, egui::CornerRadius::same(3), accent);
                         if ui
                             .add_sized(
                                 [ui.available_width().max(180.0), 30.0],

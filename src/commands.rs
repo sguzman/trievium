@@ -423,10 +423,17 @@ pub fn run(args: &[String]) -> Result<()> {
     let mut appearance = Appearance::default();
     let mut override_path = None;
     let mut operation = "pick";
+    let mut operation_explicit = false;
     let mut index = 0;
     while index < args.len() {
         match args[index].as_str() {
-            "init" | "validate" | "config-path" | "edit" => operation = &args[index],
+            "pick" | "init" | "validate" | "config-path" | "edit" => {
+                if operation_explicit {
+                    bail!("Specify only one commands operation");
+                }
+                operation = &args[index];
+                operation_explicit = true;
+            }
             "--version" | "-V" => {
                 println!("trievium {}", env!("CARGO_PKG_VERSION"));
                 return Ok(());
@@ -450,7 +457,6 @@ pub fn run(args: &[String]) -> Result<()> {
                     .context("--theme requires a value")?
                     .parse()?;
             }
-            "pick" => operation = "pick",
             other => bail!("Unknown commands argument '{other}'"),
         }
         index += 1;
@@ -887,6 +893,27 @@ mod tests {
                 },
             ],
         }
+    }
+
+    #[test]
+    fn multiple_operations_do_not_create_or_modify_a_registry() {
+        let path = std::env::temp_dir().join(format!(
+            "trievium-conflicting-operations-{}-{}.json",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let args = vec![
+            "validate".into(),
+            "--config".into(),
+            path.to_string_lossy().into_owned(),
+            "init".into(),
+        ];
+        let error = run(&args).unwrap_err().to_string();
+        assert!(error.contains("Specify only one commands operation"), "{error}");
+        assert!(!path.exists(), "conflicting CLI operations created a registry");
     }
 
     #[test]

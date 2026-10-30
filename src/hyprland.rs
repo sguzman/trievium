@@ -492,23 +492,33 @@ mod tests {
         ]"#;
         assert!(original_window_is_safe(clients, "0x100", 3));
         assert!(original_window_is_safe(clients, "0x600", 5));
-        for address in ["0x200", "0x300", "0x400", "0x500", "0x600", "0x700", "0x800", "0x900", "garbage"] {
+        for address in [
+            "0x200", "0x300", "0x400", "0x500", "0x600", "0x700", "0x800", "0x900", "garbage",
+        ] {
             assert!(
                 !original_window_is_safe(clients, address, 3),
                 "Unsafe client {address}"
             );
         }
         assert!(!original_window_is_safe(b"not json", "0x100", 3));
-        assert!(!original_window_is_safe(br#"{"address":"0x100"}"#, "0x100", 3));
+        assert!(!original_window_is_safe(
+            br#"{"address":"0x100"}"#,
+            "0x100",
+            3
+        ));
         // Hyprland special workspace IDs can be negative.
-        let special = br#"[{"address":"0xabc","class":"kitty","mapped":true,"workspace":{"id":-99}}]"#;
+        let special =
+            br#"[{"address":"0xabc","class":"kitty","mapped":true,"workspace":{"id":-99}}]"#;
         assert!(original_window_is_safe(special, "0xabc", -99));
     }
 
     #[test]
     fn workspace_identity_must_be_explicit_and_numeric() {
         assert_eq!(active_workspace_id(br#"{"id":3,"name":"3"}"#), Some(3));
-        assert_eq!(active_workspace_id(br#"{"id":-99,"name":"special"}"#), Some(-99));
+        assert_eq!(
+            active_workspace_id(br#"{"id":-99,"name":"special"}"#),
+            Some(-99)
+        );
         assert_eq!(active_workspace_id(br#"{"id":"3"}"#), None);
         assert_eq!(active_workspace_id(br#"{"name":"3"}"#), None);
         assert_eq!(active_workspace_id(b"not json"), None);

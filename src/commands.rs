@@ -903,7 +903,7 @@ mod tests {
         let config = demo();
         config.validate().unwrap();
         let index = CommandIndex::compile(&config);
-        for typed in ["wfx", "wf extra", "wf ", "wf!", "wf\\nwat", "wxcfoo"] {
+        for typed in ["wfx", "wf extra", "wf ", "wf!", "wf\nwat", "wxcfoo"] {
             assert_eq!(
                 config.resolve(typed),
                 Resolution::Continue(String::new()),

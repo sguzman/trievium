@@ -777,7 +777,15 @@ impl eframe::App for CommandPicker {
             return;
         }
         if let Some(editor) = self.editor.as_mut() {
-            match editor.ui(ui) {
+            // The editor has longer, padded input forms than the compact
+            // picker. Keep Groups and every field reachable in narrow or
+            // short windows instead of clipping the bottom of the form.
+            let editor_event = egui::ScrollArea::vertical()
+                .id_salt("command-editor-page")
+                .auto_shrink([false, false])
+                .show(ui, |ui| editor.ui(ui))
+                .inner;
+            match editor_event {
                 EditorEvent::Stay => {}
                 EditorEvent::Exit => std::process::exit(0),
                 EditorEvent::Done => {

@@ -20,12 +20,6 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libwayland-dev libegl-dev libgl-dev libxcb-shape0-dev libxcb-xfixes0-dev libxcb-render0-dev pkg-config lua5.4 sway wtype wl-clipboard libgl1-mesa-dri
       - name: Format
         run: cargo fmt --all -- --check
-      # Temporary resolution evidence for enabling OS clipboard; this step
-      # will be removed once the generated Cargo.lock is committed.
-      - name: Resolve clipboard lockfile for verification
-        run: |
-          cargo metadata --format-version 1 > /dev/null
-          git diff -- Cargo.lock
       - name: Validate locked dependency graph
         run: cargo metadata --locked --no-deps --format-version 1 > /dev/null
       - name: Tests

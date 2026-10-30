@@ -5,9 +5,9 @@ use crate::commands::{Action, CommandConfig, CommandEntry, Group};
 use crate::manager::Manager;
 use anyhow::{Context, Result, bail};
 use eframe::egui;
-use std::fs;
 #[cfg(test)]
 use std::collections::BTreeMap;
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;

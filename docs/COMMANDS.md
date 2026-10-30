@@ -141,6 +141,8 @@ The editor's filesystem reads, validation, saves and Discard reloads run
 outside egui's UI thread. Changes saved with **Done** are immediately
 available in the HUD. Commands and groups each have **Up** and **Down**
 controls for ordering their entries in the editor and JSON registry.
+On Hyprland, popup resize requests are serialized and stale worker requests
+are discarded so switching back to the picker retains picker-sized geometry.
 In the program-argument editor, each line represents one argv element.
 One structural final newline does not add an empty argument; an additional
 blank line represents an intentional empty argument, even at the end of
@@ -183,9 +185,11 @@ is not already claimed. Then test these cases with harmless commands:
    switch (for example, workspace 6). Verify the target workspace activates
    and the HUD exits without stealing focus back.
 5. **Editor round trip:** add/edit/reorder/delete a command or group, save,
-   return to the picker, and verify the new structure. While the editor is
-   open, modify the file from another process and confirm Save refuses to
-   overwrite the external change.
+   return to the picker, and verify the new structure. Confirm the HUD returns
+   to picker-sized geometry rather than retaining the larger editor dimensions;
+   repeat the transition promptly to exercise delayed resize workers. While
+   the editor is open, modify the file from another process and confirm Save
+   refuses to overwrite the external change.
 6. **Failed action recovery:** configure a harmless nonexistent executable,
    invoke its full shortcut, and confirm the HUD displays an error rather than
    closing or remaining busy. Without relaunching the HUD, type a working

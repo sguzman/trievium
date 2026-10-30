@@ -84,6 +84,8 @@ just for readability. `w f` means press `w`, then `f`, **not**
 configured sequence has been entered. Unlike the copy picker, a unique
 partial prefix is never automatically executed. Colliding and ancestor
 sequences are rejected; groups are display labels for prefix branches.
+Pasting additional text after a complete sequence (for example, `wf extra`)
+does not execute the shorter command; the invalid paste is cleared.
 Escape cancels, Backspace edits, and clicking a HUD branch advances it.
 
 **Trust boundary:** `commands.json` is executable configuration. Do not import

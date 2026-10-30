@@ -1062,7 +1062,10 @@ mod tests {
             "blank interior lines must remain explicit empty argv elements"
         );
         assert_eq!(parse_argv_lines("\n"), [""]);
-        assert_eq!(parse_argv_lines("--title\nMy App\n\n"), ["--title", "My App", ""]);
+        assert_eq!(
+            parse_argv_lines("--title\nMy App\n\n"),
+            ["--title", "My App", ""]
+        );
     }
 
     #[test]

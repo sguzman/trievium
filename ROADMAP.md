@@ -83,6 +83,14 @@ The original copy HUD and `items.json` must remain independent from
   controls for group rows, in addition to command rows. The new bounded-move
   and save/reload regression checks serialized group order and preservation
   of the existing copy library. Implementation commit [`4c12e689`](https://github.com/sguzman/trievium/commit/4c12e689ca6692214ea7542a2e7f85255976dccb); [CI run](https://github.com/sguzman/trievium/actions/runs/40972989550) passed all stages, including optimized release build and checksum packaging. Group row order does not change shortcut-key sorting in the HUD.
+- **Clipboard paste QA boundary (2026-10-29):** a nested Sway CI
+  positive control could not demonstrate Ctrl+V text delivery, even after
+  temporarily enabling eframe's optional OS clipboard support. Do not count
+  the earlier negative paste-only smoke check as evidence: it could pass
+  without delivering text. The experimental test and dependency changes were
+  reverted; the known-green 94-test reducer suite still protects exact
+  command matching. Native clipboard paste requires actual desktop QA before
+  any support or regression claim.
 - **Local blocker:** use the bounded [real Hyprland QA checklist](docs/COMMANDS.md)
   for reversible fullscreen on the original window, workspace switching,
   interactive command/editor CRUD, and the accepted copy picker. Headless

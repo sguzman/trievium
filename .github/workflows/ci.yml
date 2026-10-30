@@ -34,6 +34,12 @@ jobs:
 
           # Command registry must be independent from the existing copy library.
           commands="$RUNNER_TEMP/trievium-ci-commands.json"
+          ./target/debug/trievium commands --help | grep -F 'Usage: trievium commands'
+          ./target/debug/trievium commands -h | grep -F 'Usage: trievium commands'
+          ./target/debug/trievium commands --version | grep -F 'trievium '
+          ./target/debug/trievium commands -V | grep -F 'trievium '
+          test ! -e "$commands"
+          test ! -e "$config"
           ./target/debug/trievium commands init --config "$commands"
           ./target/debug/trievium commands validate --config "$commands"
           ./target/debug/trievium commands config-path --config "$commands" | grep -Fx "$commands"

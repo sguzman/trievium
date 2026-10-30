@@ -36,6 +36,19 @@ fn parse_argv_lines(text: &str) -> Vec<String> {
     }
 }
 
+/// Keep one structural final newline in the editable representation.
+/// A blank final argv element then has its own *additional* line break, so
+/// parsing and rendering preserve existing empty argv elements exactly.
+fn format_argv_lines(args: &[String]) -> String {
+    if args.is_empty() {
+        String::new()
+    } else {
+        let mut text = args.join("\n");
+        text.push('\n');
+        text
+    }
+}
+
 pub struct CommandEditor {
     path: PathBuf,
     /// Stable, fully resolved destination. Atomic rename must update this
@@ -47,6 +60,9 @@ pub struct CommandEditor {
     // Retain editable argv text across frames; never join large argument
     // vectors on every egui repaint.
     args_text: String,
+    // An argument with an embedded newline cannot be represented faithfully
+    // by one-argument-per-line text. Preserve it without exposing a lossy edit.
+    argv_has_newline: bool,
     error: Option<String>,
     dirty: bool,
     pending: Option<PendingSave>,
@@ -166,8 +182,16 @@ impl CommandEditor {
 
     fn select_command(&mut self, index: usize) {
         self.selected = Some(index);
+        self.argv_has_newline = false;
         self.args_text = match &self.config.commands[index].action {
-            Action::Exec { args, .. } => args.join("\n"),
+            Action::Exec { args, .. } => {
+                self.argv_has_newline = args.iter().any(|arg| arg.contains('\n'));
+                if self.argv_has_newline {
+                    String::new()
+                } else {
+                    format_argv_lines(args)
+                }
+            }
             Action::Hyprland { .. } => String::new(),
         };
     }
@@ -188,6 +212,7 @@ impl CommandEditor {
             config,
             selected: None,
             args_text: String::new(),
+            argv_has_newline: false,
             error: None,
             dirty: false,
             pending: None,
@@ -293,6 +318,7 @@ impl CommandEditor {
                         self.target = target;
                         self.selected = None;
                         self.args_text.clear();
+                        self.argv_has_newline = false;
                         self.error = None;
                         self.dirty = false;
                         self.confirm_exit = false;
@@ -422,6 +448,7 @@ impl CommandEditor {
                     self.config.commands.remove(index);
                     self.selected = None;
                     self.args_text.clear();
+                    self.argv_has_newline = false;
                     self.dirty = true;
                 }
             }
@@ -470,6 +497,7 @@ impl CommandEditor {
                         args: Vec::new(),
                     };
                     self.args_text.clear();
+                    self.argv_has_newline = false;
                     self.dirty = true;
                 }
                 if ui.radio(!is_exec, "Hyprland").clicked() && is_exec {
@@ -478,6 +506,7 @@ impl CommandEditor {
                         focus_original: true,
                     };
                     self.args_text.clear();
+                    self.argv_has_newline = false;
                     self.dirty = true;
                 }
             });
@@ -487,13 +516,19 @@ impl CommandEditor {
                         ui.label("Executable");
                         self.dirty |= ui.text_edit_singleline(program).changed();
                     });
-                    ui.label("Arguments (one argv element per line; no shell)");
-                    if ui
-                        .add(egui::TextEdit::multiline(&mut self.args_text).desired_rows(2))
-                        .changed()
-                    {
-                        *args = parse_argv_lines(&self.args_text);
-                        self.dirty = true;
+                    if self.argv_has_newline {
+                        ui.label(
+                            "This command has an argument containing a newline.                              Its argv is preserved; edit it directly in commands.json.",
+                        );
+                    } else {
+                        ui.label("Arguments (one argv element per line; no shell)");
+                        if ui
+                            .add(egui::TextEdit::multiline(&mut self.args_text).desired_rows(2))
+                            .changed()
+                        {
+                            *args = parse_argv_lines(&self.args_text);
+                            self.dirty = true;
+                        }
                     }
                 }
                 Action::Hyprland {
@@ -1069,6 +1104,24 @@ mod tests {
     }
 
     #[test]
+    fn argv_render_and_parse_preserve_empty_arguments() {
+        let examples: Vec<Vec<String>> = vec![
+            vec![],
+            vec!["".into()],
+            vec!["".into(), "".into()],
+            vec!["--title".into(), "two words".into()],
+            vec!["--title".into(), "".into()],
+            vec!["".into(), "--arg".into(), "".into()],
+        ];
+        for args in examples {
+            let rendered = format_argv_lines(&args);
+            assert_eq!(parse_argv_lines(&rendered), args);
+        }
+        assert_eq!(format_argv_lines(&["".into()]), "\n");
+        assert_eq!(format_argv_lines(&["--title".into(), "".into()]), "--title\n\n");
+    }
+
+    #[test]
     fn argv_editor_cache_only_rebuilds_when_selection_changes() {
         let dir =
             std::env::temp_dir().join(format!("trievium-command-argv-test-{}", std::process::id()));
@@ -1095,15 +1148,62 @@ mod tests {
         });
 
         editor.select_command(0);
-        assert_eq!(editor.args_text, "--title\ntwo words");
+        assert_eq!(editor.args_text, "--title\ntwo words\n");
         // The cached edit buffer is not recomputed on repaint or when the
         // user edits the underlying command before explicitly reselecting.
-        editor.args_text.push_str("\n--class");
+        editor.args_text.push_str("--class");
         assert_eq!(editor.args_text, "--title\ntwo words\n--class");
         editor.select_command(1);
         assert!(editor.args_text.is_empty());
         editor.select_command(0);
-        assert_eq!(editor.args_text, "--title\ntwo words");
+        assert_eq!(editor.args_text, "--title\ntwo words\n");
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn newline_argument_is_protected_from_lossy_line_edits() {
+        let dir = std::env::temp_dir().join(format!(
+            "trievium-command-multiline-argv-test-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("commands.json");
+        crate::commands::initialize_empty(&path).unwrap();
+        let mut editor = CommandEditor::new(path.clone()).unwrap();
+        editor.config.commands.push(CommandEntry {
+            sequence: "m l".into(),
+            label: "Multiline".into(),
+            action: Action::Exec {
+                program: "printf".into(),
+                args: vec!["line 1\nline 2".into(), "".into()],
+            },
+        });
+        editor.select_command(0);
+        assert!(editor.argv_has_newline);
+        assert!(editor.args_text.is_empty());
+
+        editor.config.commands[0].label = "Renamed".into();
+        editor.dirty = true;
+        editor.begin_save(false);
+        let ctx = egui::Context::default();
+        for _ in 0..250 {
+            editor.poll_save(&ctx);
+            if !editor.busy() {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert!(!editor.busy());
+        assert!(editor.error.is_none());
+        let reloaded = CommandConfig::load(&path).unwrap();
+        assert_eq!(reloaded.commands[0].label, "Renamed");
+        match &reloaded.commands[0].action {
+            Action::Exec { args, .. } => {
+                assert_eq!(args, &["line 1\nline 2", ""]);
+            }
+            Action::Hyprland { .. } => panic!("expected argv action"),
+        }
         fs::remove_dir_all(dir).unwrap();
     }
 

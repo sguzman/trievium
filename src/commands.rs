@@ -12,6 +12,7 @@ use std::time::Duration;
 
 use crate::appearance::Appearance;
 use crate::command_editor::{CommandEditor, EditorEvent};
+use crate::colors;
 use crate::hyprland;
 
 const MAX_SEQUENCE: usize = 12;
@@ -862,8 +863,23 @@ impl eframe::App for CommandPicker {
                         for row in rows {
                             let choice = &choices[row];
                             ui.horizontal(|ui| {
+                                // Match the established copy picker: a
+                                // deterministic label accent beside the key.
+                                // Fill the virtual row so scroll indexing
+                                // agrees with actual widget geometry.
+                                ui.set_min_height(ROW_HEIGHT);
+                                let accent = colors::for_label(&choice.label, None);
+                                let (rect, _) = ui.allocate_exact_size(
+                                    egui::vec2(22.0, 24.0),
+                                    egui::Sense::hover(),
+                                );
+                                ui.painter().rect_filled(
+                                    rect,
+                                    egui::CornerRadius::same(5),
+                                    accent,
+                                );
                                 let button = ui.add_sized(
-                                    [45.0, 28.0],
+                                    [54.0, 24.0],
                                     egui::Button::new(
                                         egui::RichText::new(
                                             choice.key.to_ascii_lowercase().to_string(),

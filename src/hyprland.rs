@@ -209,16 +209,22 @@ fn popup_dispatchers(address: &str, width: i32, height: i32) -> Result<[String; 
     ])
 }
 
-fn dispatch_lua(expression: &str) -> Result<(), String> {
+/// Hyprctl can report a dispatcher error in stdout while still exiting 0.
+/// The documented success response is exactly "ok".
+fn dispatch_accepted(exit_success: bool, stdout: &[u8]) -> bool {
+    exit_success && String::from_utf8_lossy(stdout).trim() == "ok"
+}
+
+pub(crate) fn dispatch_lua(expression: &str) -> Result<(), String> {
     let output = Command::new("hyprctl")
         .args(["dispatch", expression])
         .output()
         .map_err(|error| format!("starting hyprctl: {error}"))?;
-    if output.status.success() {
+    if dispatch_accepted(output.status.success(), &output.stdout) {
         Ok(())
     } else {
         Err(format!(
-            "Hyprland rejected {expression}: {}{}",
+            "Hyprland rejected {expression}: {} {}",
             String::from_utf8_lossy(&output.stdout).trim(),
             String::from_utf8_lossy(&output.stderr).trim()
         ))
@@ -390,6 +396,16 @@ pub fn restore_original_focus(address: &str) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn hyprctl_dispatch_requires_explicit_ok_not_only_zero_exit_status() {
+        assert!(dispatch_accepted(true, b"ok\n"));
+        assert!(dispatch_accepted(true, b" ok \r\n"));
+        assert!(!dispatch_accepted(true, b"error: invalid dispatcher\n"));
+        assert!(!dispatch_accepted(true, b""));
+        assert!(!dispatch_accepted(false, b"ok\n"));
+        assert!(!dispatch_accepted(true, b"okay\n"));
+    }
 
     #[test]
     fn command_focus_gate_serializes_initial_focus_and_command_execution() {

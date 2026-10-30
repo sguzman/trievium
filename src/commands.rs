@@ -678,7 +678,9 @@ fn has_transformed_text_input(events: &[egui::Event], retained: &str) -> bool {
             _ => return false,
         };
         text.len() > MAX_TYPED_CHARS
-            || !text.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b' ')
+            || !text
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b' ')
             || !retained.contains(text)
     })
 }
@@ -817,7 +819,9 @@ impl eframe::App for CommandPicker {
                             field.request_focus();
                         }
                         if field.changed() {
-                            if ui.input(|input| has_transformed_text_input(&input.events, &self.typed)) {
+                            if ui.input(|input| {
+                                has_transformed_text_input(&input.events, &self.typed)
+                            }) {
                                 self.typed.clear();
                                 self.refresh_choices();
                                 self.error = Some(
@@ -1031,10 +1035,7 @@ mod tests {
         // Keyboard input may arrive as Event::Text, not Event::Paste.
         // Two ordinary typed keys in one frame must remain accepted.
         assert!(!has_transformed_text_input(
-            &[
-                egui::Event::Text("w".into()),
-                egui::Event::Text("f".into()),
-            ],
+            &[egui::Event::Text("w".into()), egui::Event::Text("f".into()),],
             "wf",
         ));
         assert!(!has_transformed_text_input(

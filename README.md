@@ -4,6 +4,26 @@
 
 Open it with a Hyprland keybind, press the displayed key sequence, and Trievium copies the selected text and exits. Click **Edit** to manage entries directly in the native application. No Enter, mouse, timeout, daemon, or auto-typing into other windows is required. A small focused shortcut input receives the keys; this is not a search box or editor. Trievium is a **selection launcher**, not a global text-expansion hook or a replacement for the Lexwright editor.
 
+
+## Command-tree HUD (new feature in development)
+
+A separate `trievium commands` mode turns `Super+Space` into a
+discoverable hierarchical command launcher. It uses its own
+`~/.config/trievium/commands.json` and **never reuses or migrates**
+`items.json`. A command executes only at its exact complete sequence;
+the original copy picker continues to select at the shortest unique prefix.
+
+```ini
+bind = SUPER, SPACE, exec, trievium commands
+```
+
+`trievium commands edit` opens the separate native command/group editor. It saves atomically and refuses conflicting external changes. `trievium commands init` creates an empty registry without overwriting
+existing data; `trievium commands validate` checks it. See
+[command-tree usage, JSON example, and safety notes](docs/COMMANDS.md)
+and the [weighted development roadmap](ROADMAP.md). The command editor is implemented but needs CI and real desktop acceptance;
+**do not treat this experimental mode as released yet**.
+
+
 ## Quick start (EndeavourOS / Hyprland)
 
 Install Rust/Cargo and `wl-clipboard` using your system's package manager; you also need usual native compilation dependencies such as `pkgconf` and `libxkbcommon`. For an Arch-based environment with Rust already installed:
@@ -81,7 +101,7 @@ Stable builds are published on [GitHub Releases](https://github.com/sguzman/trie
 - `wl-copy` runs without `--foreground`, leaving clipboard ownership alive after the UI exits. Paste normally into the previous application.
 - Headless CI verifies Unicode and multiline bytes through the same subprocess boundary using a local file writer; it does not simulate a real Wayland clipboard.
 
-The on-disk library JSON schema remains **`version: 1`**, independent of application v1.0.0, and has an `entries` array. Each entry has `label` and `text`; optional `key` reserves a prefix-free shortcut. The legacy `priority` field remains readable in existing JSON but is ignored. Keys use 1-4 ASCII letters. An assigned key cannot prefix any other key. Invalid configurations (including pinned-key collisions) are rejected before launching. There is no automatic paste, command execution, network access, or telemetry.
+The on-disk library JSON schema remains **`version: 1`**, independent of application v1.0.0, and has an `entries` array. Each entry has `label` and `text`; optional `key` reserves a prefix-free shortcut. The legacy `priority` field remains readable in existing JSON but is ignored. Keys use 1-4 ASCII letters. An assigned key cannot prefix any other key. Invalid configurations (including pinned-key collisions) are rejected before launching. The original copy picker has no automatic paste, command execution, network access, or telemetry. The separate command-tree mode does execute explicitly configured actions.
 
 ```json
 {

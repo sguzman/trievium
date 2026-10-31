@@ -1,0 +1,236 @@
+# Command-tree mode (new scope)
+
+Trievium's existing copy HUD and `items.json` are intentionally preserved.
+The command HUD is an independent mode that shares the application's native
+window and appearance infrastructure, **not** its copy-item schema or mnemonic
+shortest-unique-prefix semantics.
+
+## CLI and storage
+
+| Command | Purpose |
+| --- | --- |
+| `trievium` or `trievium pick` | Original prefix-to-clipboard HUD |
+| `trievium manage` | Original copy library editor |
+| `trievium commands` | New command-tree HUD |
+| `trievium commands init` | Create empty registry, refusing overwrite |
+| `trievium commands edit` | Open native command/group editor |
+| `trievium commands validate` | Validate registry without modifying it |
+| `trievium commands config-path` | Print independent registry location |
+| `trievium commands --help` | Show command-tree usage without opening a HUD or registry |
+| `trievium commands --version` | Print the application version without opening a HUD or registry |
+
+The command registry is `$XDG_CONFIG_HOME/trievium/commands.json`, normally
+`~/.config/trievium/commands.json`. The command CLI's `--config PATH`
+overrides **only** the command registry. Original `TRIEVIUM_CONFIG` and the
+copy CLI continue to apply to `items.json` only. A missing command registry
+starts empty without sample or destructive commands. Existing `items.json`
+data and its mnemonic cache are never loaded, migrated, or rewritten by this
+mode.
+
+Example `commands.json`:
+
+```json
+{
+  "version": 1,
+  "groups": [
+    { "prefix": "w", "label": "Windows" },
+    { "prefix": "s", "label": "Workspaces" },
+    { "prefix": "a", "label": "Applications" }
+  ],
+  "commands": [
+    {
+      "sequence": "w f",
+      "label": "Toggle fullscreen",
+      "action": {
+        "type": "hyprland",
+        "expression": "hl.dsp.window.fullscreen({ mode = \"fullscreen\" })",
+        "focus_original": true
+      }
+    },
+    {
+      "sequence": "s 6",
+      "label": "QA workspace",
+      "action": {
+        "type": "hyprland",
+        "expression": "hl.dsp.focus({ workspace = \"6\" })",
+        "focus_original": false
+      }
+    },
+    {
+      "sequence": "a t",
+      "label": "Terminal",
+      "action": { "type": "exec", "program": "kitty", "args": [] }
+    }
+  ]
+}
+```
+
+Bind `Super+Space` in Hyprland to the installed executable.
+For Hyprland 0.55+ Lua configuration:
+
+```lua
+hl.bind("SUPER + SPACE", hl.dsp.exec_cmd("trievium commands"))
+```
+
+For a legacy `hyprland.conf` configuration:
+
+```ini
+bind = SUPER, SPACE, exec, trievium commands
+```
+
+Sequences consist of 1–12 ASCII alphanumeric keys; spaces in the JSON are
+just for readability. `w f` means press `w`, then `f`, **not**
+`Super+w` followed by `f`. A command only executes when its full
+configured sequence has been entered. Unlike the copy picker, a unique
+partial prefix is never automatically executed. Colliding and ancestor
+sequences are rejected; groups are display labels for prefix branches.
+Pasted input must match a full sequence (apart from spaces between keys).
+Extra characters before, within or after a shortcut (such as `zwf`, `wzf`
+or `wf extra`) cannot execute the shorter command; invalid input is cleared.
+The HUD reserves an overflow character beyond the longest ordinarily
+spaced shortcut. It also compares each raw paste with the retained input,
+rejecting text that the single-line field truncated or transformed, including
+sequences with additional separator spaces. Pasted punctuation, non-ASCII
+characters and control characters (including line breaks) are rejected
+before execution rather than relying on text-field sanitization.
+Ordinary text and IME commit events receive the same raw-input protection,
+so a transformed or truncated input-method commit cannot execute a command.
+Normal key-by-key entry still ignores an invalid key and preserves the prefix.
+Escape cancels, Backspace edits, and clicking a HUD branch advances it.
+
+**Trust boundary:** `commands.json` is executable configuration. Do not import
+command registries or Lua expressions from untrusted sources. Validation
+checks sequence collisions and required action fields; it is not a Lua
+sandbox.
+
+Execution uses direct argv-based process spawning (never `sh -c`). Hyprland
+commands are dispatched through `hyprctl dispatch` using Hyprland 0.55+ Lua
+expressions (`hl.dsp.*`). The `expression` field must be a valid dispatcher
+expression. See [Hyprland dispatchers](https://wiki.hypr.land/configuring/core/dispatchers/).
+Focus-dependent actions must
+set `focus_original: true` (the default): the HUD captures the window originally focused
+before mapping, checks that it remains a mapped non-Trievium client on
+the active workspace, restores focus and confirms that focus before invoking
+the dispatcher. If the original window has moved to another workspace, the
+action fails rather than unexpectedly switching workspaces. Workspace focus
+dispatchers use `focus_original: false`. Hyprland return codes **and** explicit `ok` responses are checked for both user-defined dispatches and Trievium's own popup focus/geometry operations; error text is never treated as success.
+Commands run on worker threads, not on the egui render path. Errors leave
+the HUD open for correction, rather than pretending success. Failed actions
+restore HUD keyboard focus only if the original window is still active:
+if the user switched to another application, recovery does not steal focus.
+A delayed initial-map worker is permanently disarmed after the first action,
+even when that action fails.
+
+
+## Local Hyprland QA before acceptance
+
+Do not merge or publish this feature until it has been exercised in a real
+Hyprland 0.55+ session. In a checkout of `feature/command-tree`, build with:
+
+```sh
+git pull --ff-only
+cargo build --release --locked
+./target/release/trievium commands edit
+./target/release/trievium commands validate
+./target/release/trievium commands
+```
+
+Opening `commands edit` on a fresh installation initializes *only*
+`commands.json`; the original clipboard library is left untouched.
+The editor's filesystem reads, validation, saves and Discard reloads run
+outside egui's UI thread. Changes saved with **Done** are immediately
+available in the HUD. The command editor now reuses the original Trievium
+manager's padded layout and outlined fields, shows an accent on each command
+row, and scrolls when the window is too short for the complete form.
+Native system clipboard support is explicitly enabled for egui text fields,
+including Ctrl+V on Wayland; verify this in the actual Hyprland session. Commands and groups each have **Up** and **Down**
+controls for ordering their entries in the editor and JSON registry.
+On Hyprland, popup resize requests are serialized and stale worker requests
+are discarded so switching back to the picker retains picker-sized geometry.
+In the program-argument editor, each line represents one argv element.
+One structural final newline does not add an empty argument; an additional
+blank line represents an intentional empty argument, even at the end of
+the list. Existing empty argv elements are preserved exactly when a command
+is reopened and edited. If an existing argument contains a line break (CR or LF),
+the editor protects it from lossy line-based edits and shows an explanation;
+edit that special-case argv directly in `commands.json`. The
+command HUD still orders choices by their actual shortcut keys rather than
+the order of the JSON entries. **Done without local edits** still reloads and
+validates the current disk snapshot on a worker before returning to the
+HUD: external edits are incorporated rather than replaced by a stale
+in-memory tree; invalid external JSON leaves the editor open with an error.
+
+**Symlink-safe saves:** If `commands.json` is a symlink to a file in a
+managed dotfiles/configuration repository, atomic saves update that resolved
+target without replacing the symlink. Retargeting the link while the editor
+is open is detected and Save is refused. Save, Close and Escape cannot
+interrupt an active save/reload; closing with unsaved edits requires
+explicit discard confirmation.
+
+Before binding the launcher to `Super+Space`, check that the key combination
+is not already claimed. Then test these cases with harmless commands:
+
+1. **Initial state:** no config -> editor opens empty without touching
+   `items.json`. Invalid command JSON should produce an error, not reset data.
+2. **Nested prefixes:** `w` then `a` must only navigate, while `w a t`
+   may launch an explicitly configured action. Invalid keys are ignored;
+   Backspace removes a prefix; Escape cancels without side effects.
+3. **Focus-sensitive action:** from a regular tiled window, use a reversible
+   command such as fullscreen. Verify it affects that original window, **not**
+   the Trievium HUD, and does not tile or rearrange other windows.
+   Invoke a short harmless command immediately after opening the HUD and
+   verify that even an early selection does not leave the popup tiled or
+   rearrange other windows.
+   Also test a moved original window, if practical: move it silently to
+   another workspace while the HUD is open, then complete a focus-dependent
+   command. The HUD should report an error instead of changing workspace.
+   Restore the window to its prior workspace after the test.
+4. **Global action:** explicitly set `focus_original: false` on a workspace
+   switch (for example, workspace 6). Verify the target workspace activates
+   and the HUD exits without stealing focus back.
+5. **Editor round trip:** verify the familiar padded/outlined layout and
+   paste a short string into a text field with Ctrl+V; then add/edit/reorder/delete a command or group, save,
+   return to the picker, and verify the new structure. Confirm the HUD returns
+   to picker-sized geometry rather than retaining the larger editor dimensions;
+   repeat the transition promptly to exercise delayed resize workers.
+   Click Done with an incomplete/invalid command: the editor must remain open,
+   preserve the unsaved draft and leave the saved registry unchanged. Correct
+   the command and click Done again: it must save and return to the picker.
+   While the editor is open, modify the file from another process and confirm
+   Save refuses to overwrite the external change.
+6. **Failed action recovery:** configure a harmless nonexistent executable,
+   invoke its full shortcut, and confirm the HUD displays an error rather than
+   closing or remaining busy. Without relaunching the HUD, type a working
+   shortcut and confirm it runs and the HUD closes. The headless Wayland
+   regression covers the recovery path; the actual error display still needs
+   desktop confirmation. For a delayed failure, also verify that the HUD
+   does not steal focus from another window selected during the action.
+7. **Regression:** launch the *original* `trievium` copy HUD, select a
+   snippet, paste it, and verify it is unchanged. Confirm
+   `trievium manage` still edits the old library.
+
+GitHub Actions exercises the native command HUD and editor under headless
+Sway, including exact selections, keyboard input, first-run initialization,
+and clipboard isolation. This does **not** establish the above Hyprland
+window-management behavior; only a real target-session QA run can do so.
+
+## Understanding command groups
+
+Command sequences such as `a t`, `a e`, and `a f` automatically create the
+`a` branch in the HUD. A group is **only an optional display name** for that
+branch: add a group whose prefix is `a` and name is `Applications` to replace
+the automatically displayed “Group a”. Groups are not executable and do not
+need to be created for commands to work. The command's **Name** is its
+visible label; **Executable** is the program to spawn; **Arguments** are
+separate argv entries, not shell syntax.
+
+## Acceptance and remaining work
+
+The command HUD, native editor, conflict-safe atomic persistence, and original
+copy picker have automated Rust and headless Wayland coverage on the feature
+branch. **That does not complete desktop acceptance.** Actual Hyprland
+window focus, fullscreen/workspace action targeting and interactive editor
+CRUD/visual behavior still require testing in the owner's session. Keep the
+PR in draft and do not publish a release until those checks pass.
+
+See [ROADMAP.md](../ROADMAP.md) for evidence-weighted completion accounting.

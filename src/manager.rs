@@ -378,7 +378,7 @@ impl Manager {
         .inner
     }
 
-    fn input_frame<R>(ui: &mut egui::Ui, body: impl FnOnce(&mut egui::Ui) -> R) -> R {
+    pub(crate) fn input_frame<R>(ui: &mut egui::Ui, body: impl FnOnce(&mut egui::Ui) -> R) -> R {
         let light = !ui.visuals().dark_mode;
         let fill = if light {
             egui::Color32::from_rgb(246, 248, 252)

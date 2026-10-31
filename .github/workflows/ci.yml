@@ -31,6 +31,39 @@ jobs:
           cargo build --locked
           config="$RUNNER_TEMP/trievium-ci-items.json"
           ./target/debug/trievium --version
+
+          # Command registry must be independent from the existing copy library.
+          commands="$RUNNER_TEMP/trievium-ci-commands.json"
+          ./target/debug/trievium commands --help | grep -F 'Usage: trievium commands'
+          ./target/debug/trievium commands -h | grep -F 'Usage: trievium commands'
+          ./target/debug/trievium commands --version | grep -F 'trievium '
+          ./target/debug/trievium commands -V | grep -F 'trievium '
+          test ! -e "$commands"
+          test ! -e "$config"
+          # Conflicting subcommands must fail before any registry is created.
+          if ./target/debug/trievium commands validate --config "$commands" init; then
+            echo "conflicting command operations unexpectedly accepted" >&2
+            exit 1
+          fi
+          test ! -e "$commands"
+          test ! -e "$config"
+          ./target/debug/trievium commands init --config "$commands"
+          ./target/debug/trievium commands validate --config "$commands"
+          ./target/debug/trievium commands config-path --config "$commands" | grep -Fx "$commands"
+          if ./target/debug/trievium commands init --config "$commands"; then
+            echo "command init unexpectedly overwrote the registry" >&2
+            exit 1
+          fi
+          test ! -e "$config"
+          # Bare relative command registry paths must initialize correctly,
+          # independently of the original copy configuration.
+          (
+            cd "$RUNNER_TEMP"
+            "$GITHUB_WORKSPACE/target/debug/trievium" commands init --config "trievium-relative-commands.json"
+            "$GITHUB_WORKSPACE/target/debug/trievium" commands validate --config "trievium-relative-commands.json"
+            test -f "trievium-relative-commands.json"
+          )
+          test ! -e "$config"
           ./target/debug/trievium init --config "$config"
           ./target/debug/trievium validate --config "$config"
           ./target/debug/trievium validate --config "$config" --theme light

@@ -21,6 +21,11 @@ fn main() {
 }
 
 fn run() -> Result<()> {
+    // This mode is intentionally separate: it never loads the copy library.
+    if std::env::args().nth(1).as_deref() == Some("commands") {
+        let args: Vec<_> = std::env::args().skip(2).collect();
+        return trievium::commands::run(&args);
+    }
     // Opt-in startup trace contains only timing milestones, never user text.
     let startup = std::env::var_os("TRIEVIUM_PROFILE_STARTUP").map(|_| Instant::now());
     let mut command = "pick".to_owned();
@@ -49,7 +54,7 @@ fn run() -> Result<()> {
             }
             "--help" | "-h" => {
                 println!(
-                    "Trievium - keyboard-first text selection\n\nUsage: trievium [pick|manage|init|validate|config-path|doctor] [--config PATH] [--theme system|light|dark] [--diagnose-input]\n\nDefault: pick, with --theme system. Keys are automatically assigned unless pinned in the JSON config."
+                    "Trievium - keyboard-first text selection and command trees\n\nUsage: trievium [pick|manage|init|validate|config-path|doctor] [--config PATH] [--theme system|light|dark] [--diagnose-input]\n       trievium commands [pick|edit|init|validate|config-path] [--config PATH] [--theme system|light|dark]\n\nDefault: copy picker. The command HUD uses its own commands.json file."
                 );
                 return Ok(());
             }

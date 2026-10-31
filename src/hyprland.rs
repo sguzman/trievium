@@ -7,12 +7,24 @@
 //! operate on unrelated clients.
 use serde_json::Value;
 use std::process::Command;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
 const APP_CLASS: &str = "trievium";
 const RETRIES: usize = 40;
 const RETRY_DELAY: Duration = Duration::from_millis(50);
+
+/// Editor-open and editor-done geometry requests launch independent workers.
+/// Serialize them and discard obsolete ones so late scheduling cannot leave
+/// the picker at editor dimensions (or vice versa).
+static RESIZE_GENERATION: AtomicU64 = AtomicU64::new(0);
+static RESIZE_GATE: Mutex<()> = Mutex::new(());
+
+fn resize_request_is_current(generation: u64, latest: &AtomicU64) -> bool {
+    latest.load(Ordering::SeqCst) == generation
+}
 
 // One named rule is updated in place on repeated launches; no growing list
 // of per-process rules, and no modification of the user's config file.
@@ -41,14 +53,117 @@ pub fn prepare_floating_popup() -> Result<(), String> {
 }
 
 pub fn focus_new_popup(width: i32, height: i32) {
+    start_popup_focus(width, height, true);
+}
+
+/// Serializes the command HUD's initial compositor focus setup against the
+/// subsequently chosen action. Never blocks egui; action work uses a worker.
+#[derive(Clone, Default)]
+pub struct CommandPopupFocus {
+    gate: Arc<Mutex<()>>,
+    action_started: Arc<AtomicBool>,
+}
+
+impl CommandPopupFocus {
+    pub fn mark_action_started(&self) {
+        // Mark before spawning the action worker, so a not-yet-mapped HUD
+        // cannot focus itself after the original window was restored.
+        self.action_started.store(true, Ordering::SeqCst);
+    }
+
+    pub fn run_action<T>(&self, action: impl FnOnce() -> T) -> T {
+        let _guard = self
+            .gate
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
+        action()
+    }
+
+    pub fn recover_after_error(&self, original: Option<&str>) {
+        self.run_action(|| {
+            if original.is_some()
+                && std::env::var_os("HYPRLAND_INSTANCE_SIGNATURE").is_some_and(|s| !s.is_empty())
+                && let Some(address) = our_floating_window_address(std::process::id())
+                && Command::new("hyprctl")
+                    .args(["-j", "activewindow"])
+                    .output()
+                    .is_ok_and(|output| {
+                        output.status.success() && recovery_may_refocus(original, &output.stdout)
+                    })
+            {
+                // Restore the HUD only if the failed action left the original
+                // window active. If the user selected something else while
+                // the command ran, never take focus back from that window.
+                let expression = format!("hl.dsp.focus({{ window = \"address:{address}\" }})");
+                if let Err(error) = dispatch_lua(&expression) {
+                    eprintln!("trievium: could not restore command HUD focus: {error}");
+                }
+            }
+            // Keep startup focus permanently disarmed after the first action.
+            // Otherwise a delayed map worker could steal focus after failure.
+        });
+    }
+}
+
+/// A command may execute as soon as the popup receives its first key.
+/// Prevent delayed window-map geometry/focus commands from racing with that
+/// action, otherwise a focus-dependent dispatcher could hit the HUD instead.
+pub fn focus_new_command_popup(width: i32, height: i32) -> CommandPopupFocus {
+    let focus = CommandPopupFocus::default();
+    if std::env::var_os("HYPRLAND_INSTANCE_SIGNATURE").is_some_and(|s| !s.is_empty()) {
+        let pid = std::process::id();
+        let worker_focus = focus.clone();
+        thread::spawn(move || focus_command_when_mapped(pid, width, height, worker_focus));
+    }
+    focus
+}
+
+/// Always reject an unexpected tiled mapping, even when an early command
+/// has already disabled the optional startup focus/geometry setup. Checking
+/// action_started first would silently leave the HUD tiled in that case.
+fn command_popup_may_configure(floating: bool, action_started: bool) -> Result<bool, &'static str> {
+    if !floating {
+        Err("command HUD mapped tiled despite the pre-map rule; closing")
+    } else {
+        Ok(!action_started)
+    }
+}
+
+fn focus_command_when_mapped(pid: u32, width: i32, height: i32, focus: CommandPopupFocus) {
+    for _ in 0..RETRIES {
+        if let Some((address, floating)) = our_window_address(pid) {
+            focus.run_action(|| {
+                match command_popup_may_configure(
+                    floating,
+                    focus.action_started.load(Ordering::SeqCst),
+                ) {
+                    Err(error) => {
+                        eprintln!("trievium: {error}");
+                        std::process::exit(1);
+                    }
+                    Ok(false) => return,
+                    Ok(true) => {}
+                }
+                if let Err(error) = configure_our_window(&address, width, height) {
+                    eprintln!("trievium: cannot configure command HUD: {error}");
+                }
+            });
+            return;
+        }
+        thread::sleep(RETRY_DELAY);
+    }
+    eprintln!("trievium: timed out locating its command HUD");
+}
+
+fn start_popup_focus(width: i32, height: i32, delayed_correction: bool) {
     if std::env::var_os("HYPRLAND_INSTANCE_SIGNATURE").is_none_or(|s| s.is_empty()) {
         return;
     }
     let pid = std::process::id();
-    thread::spawn(move || focus_when_mapped(pid, width, height));
+    thread::spawn(move || focus_when_mapped(pid, width, height, delayed_correction));
 }
 
-fn focus_when_mapped(pid: u32, width: i32, height: i32) {
+fn focus_when_mapped(pid: u32, width: i32, height: i32, delayed_correction: bool) {
     for _ in 0..RETRIES {
         if let Some((address, floating)) = our_window_address(pid) {
             if !floating {
@@ -61,9 +176,9 @@ fn focus_when_mapped(pid: u32, width: i32, height: i32) {
                 eprintln!("trievium: could not configure Hyprland popup: {error}");
                 return;
             }
-            // Initial focus may lag mapping slightly. Retry at most once,
-            // never continually reclaim the keyboard or warp the pointer.
-            if let Err(error) = confirm_popup_focus(&address) {
+            // Retain the existing clipboard picker's bounded correction,
+            // but never refocus the command HUD after actions may begin.
+            if delayed_correction && let Err(error) = confirm_popup_focus(&address) {
                 eprintln!("trievium: {error}");
             }
             return;
@@ -128,16 +243,22 @@ fn popup_dispatchers(address: &str, width: i32, height: i32) -> Result<[String; 
     ])
 }
 
-fn dispatch_lua(expression: &str) -> Result<(), String> {
+/// Hyprctl can report a dispatcher error in stdout while still exiting 0.
+/// The documented success response is exactly "ok".
+fn dispatch_accepted(exit_success: bool, stdout: &[u8]) -> bool {
+    exit_success && String::from_utf8_lossy(stdout).trim() == "ok"
+}
+
+pub(crate) fn dispatch_lua(expression: &str) -> Result<(), String> {
     let output = Command::new("hyprctl")
         .args(["dispatch", expression])
         .output()
         .map_err(|error| format!("starting hyprctl: {error}"))?;
-    if output.status.success() {
+    if dispatch_accepted(output.status.success(), &output.stdout) {
         Ok(())
     } else {
         Err(format!(
-            "Hyprland rejected {expression}: {}{}",
+            "Hyprland rejected {expression}: {} {}",
             String::from_utf8_lossy(&output.stdout).trim(),
             String::from_utf8_lossy(&output.stderr).trim()
         ))
@@ -155,6 +276,17 @@ fn active_window_address(bytes: &[u8]) -> Option<String> {
     let value: Value = serde_json::from_slice(bytes).ok()?;
     let address = value.get("address")?.as_str()?;
     valid_address(address).then(|| address.to_owned())
+}
+
+/// After a failed launch, only the original foreground window may hand
+/// focus back to the HUD. Never interrupt an unrelated window the user
+/// focused while the asynchronous action was running. Fail closed when
+/// compositor identity is missing or malformed.
+fn recovery_may_refocus(original: Option<&str>, active_json: &[u8]) -> bool {
+    let Some(original) = original.filter(|address| valid_address(address)) else {
+        return false;
+    };
+    active_window_address(active_json).as_deref() == Some(original)
 }
 
 fn is_active_window(address: &str) -> bool {
@@ -216,8 +348,22 @@ pub fn resize_own_popup(width: i32, height: i32) {
         return;
     }
     let pid = std::process::id();
+    let generation = RESIZE_GENERATION
+        .fetch_add(1, Ordering::SeqCst)
+        .wrapping_add(1);
     thread::spawn(move || {
+        let _guard = RESIZE_GATE
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
+        if !resize_request_is_current(generation, &RESIZE_GENERATION) {
+            return;
+        }
         if let Some(address) = our_floating_window_address(pid) {
+            // Resolving the window can block behind the compositor. A newer
+            // picker/editor transition may have arrived during that query.
+            if !resize_request_is_current(generation, &RESIZE_GENERATION) {
+                return;
+            }
             let selector = format!("address:{address}");
             if let Err(error) = dispatch_lua(&format!(
                 "hl.dsp.window.resize({{ window = \"{selector}\", x = {width}, y = {height} }})"
@@ -233,9 +379,196 @@ pub fn resize_own_popup(width: i32, height: i32) {
     });
 }
 
+/// Capture the original focused window before the command HUD takes focus.
+pub fn focused_window_before_popup() -> Option<String> {
+    if std::env::var_os("HYPRLAND_INSTANCE_SIGNATURE").is_none_or(|s| s.is_empty()) {
+        return None;
+    }
+    let output = Command::new("hyprctl")
+        .args(["-j", "activewindow"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    active_window_address(&output.stdout)
+}
+
+/// A focus-dependent action must never target the command HUD, a client
+/// with incomplete identity, or a window moved to another workspace.
+/// Otherwise refocusing it could unexpectedly change the active workspace.
+fn original_window_is_safe(clients_json: &[u8], address: &str, workspace: i64) -> bool {
+    if !valid_address(address) {
+        return false;
+    }
+    let Ok(clients) = serde_json::from_slice::<Vec<Value>>(clients_json) else {
+        return false;
+    };
+    clients.iter().any(|client| {
+        client.get("address").and_then(Value::as_str) == Some(address)
+            && client.get("mapped").and_then(Value::as_bool) == Some(true)
+            && client
+                .get("workspace")
+                .and_then(|value| value.get("id"))
+                .and_then(Value::as_i64)
+                == Some(workspace)
+            && client
+                .get("class")
+                .and_then(Value::as_str)
+                .is_some_and(|class| !class.is_empty() && class != APP_CLASS)
+    })
+}
+
+fn active_workspace_id(bytes: &[u8]) -> Option<i64> {
+    let value: Value = serde_json::from_slice(bytes).ok()?;
+    value.get("id")?.as_i64()
+}
+
+/// Refocus only the window captured before the popup was mapped. Do not
+/// blindly dispatch focus-sensitive actions to the command HUD or whichever
+/// other window happened to become active.
+pub fn restore_original_focus(address: &str) -> Result<(), String> {
+    if !valid_address(address) {
+        return Err("Invalid original window address".into());
+    }
+    let output = Command::new("hyprctl")
+        .args(["-j", "clients"])
+        .output()
+        .map_err(|error| format!("Checking original window: {error}"))?;
+    if !output.status.success() {
+        return Err("Unable to verify original Hyprland window".into());
+    }
+    let workspace_output = Command::new("hyprctl")
+        .args(["-j", "activeworkspace"])
+        .output()
+        .map_err(|error| format!("Checking active workspace: {error}"))?;
+    if !workspace_output.status.success() {
+        return Err("Unable to verify active Hyprland workspace".into());
+    }
+    let workspace = active_workspace_id(&workspace_output.stdout)
+        .ok_or("Unable to identify active Hyprland workspace")?;
+    if !original_window_is_safe(&output.stdout, address, workspace) {
+        return Err(
+            "Original window is no longer mapped, is not trusted, or moved to another workspace; refusing to switch workspaces"
+                .into(),
+        );
+    }
+    dispatch_lua(&format!(
+        "hl.dsp.focus({{ window = \"address:{address}\" }})"
+    ))?;
+    // Hyprland can publish the updated activewindow state just after the
+    // dispatcher returns. Observe a bounded settling window instead of
+    // falsely rejecting a correct focus transition. Never dispatch focus
+    // again, warp the pointer, or perform these polls on the egui thread.
+    for attempt in 0..6 {
+        if is_active_window(address) {
+            return Ok(());
+        }
+        if attempt < 5 {
+            thread::sleep(Duration::from_millis(25));
+        }
+    }
+    Err("Refusing to dispatch: original window did not receive focus".into())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn hyprctl_dispatch_requires_explicit_ok_not_only_zero_exit_status() {
+        assert!(dispatch_accepted(true, b"ok\n"));
+        assert!(dispatch_accepted(true, b" ok \r\n"));
+        assert!(!dispatch_accepted(true, b"error: invalid dispatcher\n"));
+        assert!(!dispatch_accepted(true, b""));
+        assert!(!dispatch_accepted(false, b"ok\n"));
+        assert!(!dispatch_accepted(true, b"okay\n"));
+    }
+
+    #[test]
+    fn command_focus_gate_serializes_initial_focus_and_command_execution() {
+        use std::sync::mpsc;
+
+        let focus = CommandPopupFocus::default();
+        assert!(!focus.action_started.load(Ordering::SeqCst));
+        let initial_focus_guard = focus.gate.lock().unwrap();
+        let (ready_sender, ready_receiver) = mpsc::channel();
+        let (done_sender, done_receiver) = mpsc::channel();
+        let worker = focus.clone();
+        let thread = std::thread::spawn(move || {
+            ready_sender.send(()).unwrap();
+            worker.run_action(|| done_sender.send(()).unwrap());
+        });
+        ready_receiver.recv().unwrap();
+        assert!(done_receiver.try_recv().is_err());
+        focus.mark_action_started();
+        assert!(focus.action_started.load(Ordering::SeqCst));
+        drop(initial_focus_guard);
+        done_receiver.recv().unwrap();
+        thread.join().unwrap();
+    }
+
+    #[test]
+    fn failed_action_does_not_rearm_delayed_startup_focus() {
+        let focus = CommandPopupFocus::default();
+        focus.mark_action_started();
+        focus.recover_after_error(None);
+        assert!(
+            focus.action_started.load(Ordering::SeqCst),
+            "the initial focus worker must stay disarmed after a failed action"
+        );
+    }
+
+    #[test]
+    fn early_command_does_not_skip_tiled_map_safety_check() {
+        assert_eq!(command_popup_may_configure(true, false), Ok(true));
+        assert_eq!(command_popup_may_configure(true, true), Ok(false));
+        assert!(command_popup_may_configure(false, false).is_err());
+        assert!(
+            command_popup_may_configure(false, true).is_err(),
+            "early action must never hide an unexpectedly tiled command HUD"
+        );
+    }
+
+    #[test]
+    fn late_editor_resize_worker_cannot_override_newer_picker_request() {
+        use std::sync::mpsc;
+
+        let generation = Arc::new(AtomicU64::new(1));
+        let gate = Arc::new(Mutex::new(()));
+        let applied = Arc::new(Mutex::new(Vec::new()));
+        let held = gate.lock().unwrap();
+
+        let (ready_tx, ready_rx) = mpsc::channel();
+        let old_generation = Arc::clone(&generation);
+        let old_gate = Arc::clone(&gate);
+        let old_applied = Arc::clone(&applied);
+        let old_worker = thread::spawn(move || {
+            ready_tx.send(()).unwrap();
+            let _lock = old_gate.lock().unwrap();
+            if resize_request_is_current(1, &old_generation) {
+                old_applied.lock().unwrap().push(1);
+            }
+        });
+        ready_rx.recv().unwrap();
+
+        // A newer request supersedes the queued old worker before either
+        // can enter the serial compositor section.
+        generation.store(2, Ordering::SeqCst);
+        let next_generation = Arc::clone(&generation);
+        let next_gate = Arc::clone(&gate);
+        let next_applied = Arc::clone(&applied);
+        let new_worker = thread::spawn(move || {
+            let _lock = next_gate.lock().unwrap();
+            if resize_request_is_current(2, &next_generation) {
+                next_applied.lock().unwrap().push(2);
+            }
+        });
+        drop(held);
+        old_worker.join().unwrap();
+        new_worker.join().unwrap();
+        assert_eq!(*applied.lock().unwrap(), vec![2]);
+    }
 
     #[test]
     fn floating_resize_requires_floating_own_process_window() {
@@ -267,11 +600,83 @@ mod tests {
     }
 
     #[test]
+    fn original_focus_requires_mapped_identified_client_on_active_workspace() {
+        let clients = br#"[
+            {"address":"0x100","class":"kitty","mapped":true,"workspace":{"id":3}},
+            {"address":"0x200","class":"trievium","mapped":true,"workspace":{"id":3}},
+            {"address":"0x300","class":"kitty","mapped":false,"workspace":{"id":3}},
+            {"address":"0x400","mapped":true,"workspace":{"id":3}},
+            {"address":"0x500","class":"","mapped":true,"workspace":{"id":3}},
+            {"address":"0x600","class":"firefox","mapped":true,"workspace":{"id":5}},
+            {"address":"0x700","class":"kitty","mapped":true},
+            {"address":"0x800","class":"kitty","mapped":true,"workspace":{"id":"3"}}
+        ]"#;
+        assert!(original_window_is_safe(clients, "0x100", 3));
+        assert!(original_window_is_safe(clients, "0x600", 5));
+        for address in [
+            "0x200", "0x300", "0x400", "0x500", "0x600", "0x700", "0x800", "0x900", "garbage",
+        ] {
+            assert!(
+                !original_window_is_safe(clients, address, 3),
+                "Unsafe client {address}"
+            );
+        }
+        assert!(!original_window_is_safe(b"not json", "0x100", 3));
+        assert!(!original_window_is_safe(
+            br#"{"address":"0x100"}"#,
+            "0x100",
+            3
+        ));
+        // Hyprland special workspace IDs can be negative.
+        let special =
+            br#"[{"address":"0xabc","class":"kitty","mapped":true,"workspace":{"id":-99}}]"#;
+        assert!(original_window_is_safe(special, "0xabc", -99));
+    }
+
+    #[test]
+    fn workspace_identity_must_be_explicit_and_numeric() {
+        assert_eq!(active_workspace_id(br#"{"id":3,"name":"3"}"#), Some(3));
+        assert_eq!(
+            active_workspace_id(br#"{"id":-99,"name":"special"}"#),
+            Some(-99)
+        );
+        assert_eq!(active_workspace_id(br#"{"id":"3"}"#), None);
+        assert_eq!(active_workspace_id(br#"{"name":"3"}"#), None);
+        assert_eq!(active_workspace_id(b"not json"), None);
+    }
+
+    #[test]
     fn rejects_invalid_window_addresses() {
         for address in ["", "0x", "0x123,activewindow", "123", "0x-1"] {
             assert!(!valid_address(address));
         }
         assert!(valid_address("0x1a2BF0"));
+    }
+
+    #[test]
+    fn failed_action_recovery_only_refocuses_from_original_window() {
+        assert!(recovery_may_refocus(
+            Some("0x100"),
+            br#"{"address":"0x100","class":"kitty"}"#
+        ));
+        assert!(!recovery_may_refocus(
+            Some("0x100"),
+            br#"{"address":"0x200","class":"firefox"}"#
+        ));
+        assert!(!recovery_may_refocus(
+            Some("0x100"),
+            br#"{"address":"0x300","class":"trievium"}"#
+        ));
+        assert!(!recovery_may_refocus(
+            Some("0x100"),
+            br#"{"address":"invalid"}"#
+        ));
+        assert!(!recovery_may_refocus(Some("0x100"), b"invalid json"));
+        assert!(!recovery_may_refocus(None, br#"{"address":"0x100"}"#));
+        assert!(!recovery_may_refocus(
+            Some("invalid"),
+            br#"{"address":"0x100"}"#
+        ));
     }
 
     #[test]

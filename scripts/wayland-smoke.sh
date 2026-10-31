@@ -263,3 +263,282 @@ if [[ "$copied" != "Brief selected" ]]; then
 fi
 wait_for_picker_exit
 echo "Wayland prefix E2E passed: unique, ambiguous, and ignored invalid letters."
+
+
+# Command-tree regression: a single remaining candidate must NOT execute at
+# the first key. Only the complete configured sequence launches the program.
+# This must not read, mutate, or replace the copy library or clipboard.
+command_config="$XDG_RUNTIME_DIR/commands.json"
+command_marker="$XDG_RUNTIME_DIR/command-completed"
+deep_marker="$XDG_RUNTIME_DIR/deep-command-completed"
+cp "$config" "$XDG_RUNTIME_DIR/copy-before-commands.json"
+cat > "$command_config" <<JSON
+{"version":1,"groups":[
+  {"prefix":"w","label":"Window commands"},
+  {"prefix":"w a","label":"Advanced commands"}
+],"commands":[
+  {"sequence":"w f","label":"Complete marker",
+   "action":{"type":"exec","program":"touch","args":["$command_marker"]}},
+  {"sequence":"w e","label":"Deliberate launch error",
+   "action":{"type":"exec","program":"/trievium-ci-intentionally-nonexistent-executable","args":[]}},
+  {"sequence":"w a t","label":"Deep marker",
+   "action":{"type":"exec","program":"touch","args":["$deep_marker"]}}
+]}
+JSON
+./target/debug/trievium commands validate --config "$command_config"
+./target/debug/trievium commands --config "$command_config" >"$XDG_RUNTIME_DIR/commands.log" 2>&1 &
+picker_pid=$!
+found=""
+for _ in $(seq 1 100); do
+  found=$(swaymsg -s "$sway_sock" -t get_tree | grep -o '"app_id": "trievium"' | head -1 || true)
+  if [[ -n "$found" ]]; then
+    break
+  fi
+  sleep 0.1
+done
+if [[ -z "$found" ]]; then
+  echo "Command HUD did not map on Wayland" >&2
+  cat "$XDG_RUNTIME_DIR/commands.log" >&2
+  exit 1
+fi
+swaymsg -s "$sway_sock" '[app_id="trievium"] focus'
+sleep 0.2
+wtype w
+sleep 0.3
+if [[ -e "$command_marker" || -e "$deep_marker" ]] || ! kill -0 "$picker_pid" 2>/dev/null; then
+  echo "Command HUD executed partial prefix prematurely" >&2
+  cat "$XDG_RUNTIME_DIR/commands.log" >&2
+  exit 1
+fi
+wtype x
+sleep 0.15
+if [[ -e "$command_marker" || -e "$deep_marker" ]]; then
+  echo "Invalid command key triggered an action" >&2
+  exit 1
+fi
+wtype -k BackSpace
+wtype w
+wtype a
+sleep 0.15
+if [[ -e "$deep_marker" ]] || ! kill -0 "$picker_pid" 2>/dev/null; then
+  echo "Nested command prefix executed prematurely" >&2
+  exit 1
+fi
+wtype t
+for _ in $(seq 1 70); do
+  if [[ -e "$deep_marker" ]]; then
+    break
+  fi
+  sleep 0.1
+done
+if [[ ! -e "$deep_marker" ]]; then
+  echo "Backspace or three-key command traversal failed" >&2
+  cat "$XDG_RUNTIME_DIR/commands.log" >&2
+  exit 1
+fi
+wait_for_picker_exit
+
+# Reopen and verify a different command shares the first prefix.
+./target/debug/trievium commands --config "$command_config" >"$XDG_RUNTIME_DIR/commands-second.log" 2>&1 &
+picker_pid=$!
+found=""
+for _ in $(seq 1 100); do
+  found=$(swaymsg -s "$sway_sock" -t get_tree | grep -o '"app_id": "trievium"' | head -1 || true)
+  if [[ -n "$found" ]]; then
+    break
+  fi
+  sleep 0.1
+done
+if [[ -z "$found" ]]; then
+  echo "Second command HUD did not map" >&2
+  cat "$XDG_RUNTIME_DIR/commands-second.log" >&2
+  exit 1
+fi
+swaymsg -s "$sway_sock" '[app_id="trievium"] focus'
+sleep 0.2
+wtype w
+sleep 0.15
+wtype f
+for _ in $(seq 1 70); do
+  if [[ -e "$command_marker" ]]; then
+    break
+  fi
+  sleep 0.1
+done
+if [[ ! -e "$command_marker" ]]; then
+  echo "Command HUD did not execute the completed sequence" >&2
+  cat "$XDG_RUNTIME_DIR/commands.log" >&2
+  exit 1
+fi
+wait_for_picker_exit
+cmp "$config" "$XDG_RUNTIME_DIR/copy-before-commands.json"
+if [[ "$(wl-paste -n 2>/dev/null || true)" != "Brief selected" ]]; then
+  echo "Command execution unexpectedly changed the clipboard" >&2
+  exit 1
+fi
+echo "Wayland commands E2E passed: exact sequence executed; clipboard and items preserved."
+
+# Actual Wayland clipboard regression for the new command TextEdit. This uses
+# wl-copy plus the virtual keyboard's Ctrl+V, not an injected egui Paste event.
+# Invalid clipboard text must not execute a valid prefix; a subsequent valid
+# paste must execute the whole shortcut and exit without changing items.json.
+rm -f "$command_marker"
+./target/debug/trievium commands --config "$command_config" >"$XDG_RUNTIME_DIR/command-paste.log" 2>&1 &
+picker_pid=$!
+found=""
+for _ in $(seq 1 100); do
+  found=$(swaymsg -s "$sway_sock" -t get_tree | grep -o '"app_id": "trievium"' | head -1 || true)
+  if [[ -n "$found" ]]; then
+    break
+  fi
+  sleep 0.1
+done
+if [[ -z "$found" ]]; then
+  echo "Command HUD did not map for Wayland clipboard test" >&2
+  cat "$XDG_RUNTIME_DIR/command-paste.log" >&2
+  exit 1
+fi
+swaymsg -s "$sway_sock" '[app_id="trievium"] focus'
+sleep 0.25
+printf '%s' 'wf extra' | wl-copy
+wtype -M ctrl -k v -m ctrl
+sleep 0.3
+if [[ -e "$command_marker" ]] || ! kill -0 "$picker_pid" 2>/dev/null; then
+  echo "Invalid Wayland clipboard paste executed a shortcut or closed the HUD" >&2
+  cat "$XDG_RUNTIME_DIR/command-paste.log" >&2
+  exit 1
+fi
+# Replace any retained input with an exact valid sequence. This also confirms
+# that clipboard paste works after the editor rejects the first attempt.
+printf '%s' 'wf' | wl-copy
+wtype -M ctrl -k a -m ctrl
+wtype -M ctrl -k v -m ctrl
+for _ in $(seq 1 70); do
+  if [[ -e "$command_marker" ]]; then
+    break
+  fi
+  sleep 0.1
+done
+if [[ ! -e "$command_marker" ]]; then
+  echo "Native Ctrl+V did not execute a valid Wayland clipboard command" >&2
+  cat "$XDG_RUNTIME_DIR/command-paste.log" >&2
+  exit 1
+fi
+wait_for_picker_exit
+cmp "$config" "$XDG_RUNTIME_DIR/copy-before-commands.json"
+# Reestablish the earlier clipboard fixture for the following isolation checks.
+printf '%s' 'Brief selected' | wl-copy
+echo "Wayland command clipboard E2E passed: invalid Ctrl+V rejected, valid Ctrl+V executed."
+
+# Command-worker error regression: a missing executable must not exit the HUD
+# or leave it busy. The same picker must accept a subsequent valid shortcut.
+rm -f "$command_marker"
+./target/debug/trievium commands --config "$command_config" >"$XDG_RUNTIME_DIR/command-error-recovery.log" 2>&1 &
+picker_pid=$!
+found=""
+for _ in $(seq 1 100); do
+  found=$(swaymsg -s "$sway_sock" -t get_tree | grep -o '"app_id": "trievium"' | head -1 || true)
+  if [[ -n "$found" ]]; then
+    break
+  fi
+  sleep 0.1
+done
+if [[ -z "$found" ]]; then
+  echo "Command HUD did not map for failed-launch recovery" >&2
+  cat "$XDG_RUNTIME_DIR/command-error-recovery.log" >&2
+  exit 1
+fi
+swaymsg -s "$sway_sock" '[app_id="trievium"] focus'
+sleep 0.2
+wtype w
+wtype e
+sleep 0.5
+if [[ -e "$command_marker" ]] || ! kill -0 "$picker_pid" 2>/dev/null; then
+  echo "Failed command executed another action or unexpectedly closed HUD" >&2
+  cat "$XDG_RUNTIME_DIR/command-error-recovery.log" >&2
+  exit 1
+fi
+wtype w
+wtype f
+for _ in $(seq 1 70); do
+  if [[ -e "$command_marker" ]]; then
+    break
+  fi
+  sleep 0.1
+done
+if [[ ! -e "$command_marker" ]]; then
+  echo "Command HUD did not recover from failed process launch" >&2
+  cat "$XDG_RUNTIME_DIR/command-error-recovery.log" >&2
+  exit 1
+fi
+wait_for_picker_exit
+cmp "$config" "$XDG_RUNTIME_DIR/copy-before-commands.json"
+if [[ "$(wl-paste -n 2>/dev/null || true)" != "Brief selected" ]]; then
+  echo "Command error recovery unexpectedly modified clipboard" >&2
+  exit 1
+fi
+echo "Wayland command error recovery E2E passed: failed launch kept HUD open; next shortcut succeeded."
+
+
+# Native command editor is independently launchable and Escape must not
+# modify the command registry (or the copy library).
+cp "$command_config" "$XDG_RUNTIME_DIR/commands-before-editor.json"
+./target/debug/trievium commands edit --config "$command_config" >"$XDG_RUNTIME_DIR/command-editor.log" 2>&1 &
+picker_pid=$!
+found=""
+for _ in $(seq 1 100); do
+  found=$(swaymsg -s "$sway_sock" -t get_tree | grep -o '"app_id": "trievium"' | head -1 || true)
+  if [[ -n "$found" ]]; then
+    break
+  fi
+  sleep 0.1
+done
+if [[ -z "$found" ]]; then
+  echo "Command editor did not map on Wayland" >&2
+  cat "$XDG_RUNTIME_DIR/command-editor.log" >&2
+  exit 1
+fi
+swaymsg -s "$sway_sock" '[app_id="trievium"] focus'
+sleep 0.2
+wtype -k Escape
+wait_for_picker_exit
+cmp "$command_config" "$XDG_RUNTIME_DIR/commands-before-editor.json"
+cmp "$config" "$XDG_RUNTIME_DIR/copy-before-commands.json"
+echo "Wayland command editor E2E passed: native editor opened and closed without modifying either library."
+
+
+# On a fresh installation, opening the command editor first must initialize
+# only its own registry; no separate 'commands init' prerequisite is required.
+fresh_commands="$XDG_RUNTIME_DIR/first-run-commands.json"
+test ! -e "$fresh_commands"
+./target/debug/trievium commands edit --config "$fresh_commands" >"$XDG_RUNTIME_DIR/command-first-run.log" 2>&1 &
+picker_pid=$!
+found=""
+for _ in $(seq 1 100); do
+  found=$(swaymsg -s "$sway_sock" -t get_tree | grep -o '"app_id": "trievium"' | head -1 || true)
+  if [[ -n "$found" ]]; then
+    break
+  fi
+  sleep 0.1
+done
+if [[ -z "$found" || ! -f "$fresh_commands" ]]; then
+  echo "First-run command editor did not create and open its own registry" >&2
+  cat "$XDG_RUNTIME_DIR/command-first-run.log" >&2
+  exit 1
+fi
+# A second command HUD during first-run editing must exit as Busy,
+# not start another native window or rewrite the registry.
+timeout 5s ./target/debug/trievium commands --config "$fresh_commands" >"$XDG_RUNTIME_DIR/command-concurrent.log" 2>&1
+if ! grep -Fq 'another HUD is already open' "$XDG_RUNTIME_DIR/command-concurrent.log"; then
+  echo "Second command invocation ignored the single-instance lock" >&2
+  cat "$XDG_RUNTIME_DIR/command-concurrent.log" >&2
+  exit 1
+fi
+swaymsg -s "$sway_sock" '[app_id="trievium"] focus'
+sleep 0.2
+wtype -k Escape
+wait_for_picker_exit
+./target/debug/trievium commands validate --config "$fresh_commands"
+cmp "$config" "$XDG_RUNTIME_DIR/copy-before-commands.json"
+echo "Wayland fresh-editor E2E passed: independent registry initialized with no copy-library mutation."
+

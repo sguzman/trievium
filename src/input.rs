@@ -11,7 +11,7 @@ pub enum TypedOutcome {
 pub fn resolve_typed(buffer: &str, map: &Keymap) -> TypedOutcome {
     let mut prefix = String::new();
     for ch in buffer.chars() {
-        if !ch.is_ascii_alphabetic() {
+        if !ch.is_ascii_graphic() {
             continue;
         }
         prefix.push(ch.to_ascii_uppercase());
@@ -99,6 +99,21 @@ mod tests {
             resolve_typed("🌎é!", &map),
             TypedOutcome::Continue(String::new())
         );
+    }
+
+    #[test]
+    fn digits_and_shifted_punctuation_resolve_as_distinct_pinned_shortcuts() {
+        let map = Keymap::build(&[
+            entry("New Rust", "1"), entry("Adopt Rust", "!"),
+            entry("New Port", "2"), entry("Adopt Port", "@"),
+            entry("Existing", "A"),
+        ]).unwrap();
+        assert_eq!(resolve_typed("1", &map), TypedOutcome::Selected(0));
+        assert_eq!(resolve_typed("!", &map), TypedOutcome::Selected(1));
+        assert_eq!(resolve_typed("2", &map), TypedOutcome::Selected(2));
+        assert_eq!(resolve_typed("@", &map), TypedOutcome::Selected(3));
+        assert_eq!(resolve_typed("a", &map), TypedOutcome::Selected(4));
+        assert_eq!(resolve_typed("🌎é!", &map), TypedOutcome::Selected(1));
     }
 
     #[test]

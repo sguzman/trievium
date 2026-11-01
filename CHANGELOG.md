@@ -2,6 +2,10 @@
 
 All notable Trievium changes are recorded here. Versions follow Semantic Versioning.
 
+## Unreleased
+
+- Support pinned 1–4-character printable ASCII shortcuts, including number-row digits and shifted punctuation (for example, `1` and `!`), without displacing existing automatically assigned A–Z mnemonics. Library JSON remains schema version 1. Keyboard glyphs are layout-dependent.
+
 ## [1.1.0] - 2026-10-27
 
 - Native system-font fallback with full-color emoji rendering where a color emoji font is installed (egui 0.37).

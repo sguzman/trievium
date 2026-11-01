@@ -7,6 +7,12 @@ use std::collections::BTreeMap;
 const ALPHABET: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const MAX_DEPTH: usize = 4;
 
+// Printable ASCII is supported for explicitly pinned shortcuts. Automatic
+// mnemonic assignment remains A-Z only, preserving existing key identities.
+fn alphabet_only(code: &str) -> bool {
+    code.bytes().all(|c| c.is_ascii_uppercase())
+}
+
 #[derive(Default, Debug)]
 struct Node {
     terminal: Option<usize>,
@@ -37,7 +43,13 @@ impl Node {
         if self.conflicts(code) {
             bail!("Key '{code}' duplicates or prefixes another key");
         }
-        let cost = capacity(MAX_DEPTH - code.len());
+        // Punctuation/digit branches are disjoint from the A-Z-only automatic
+        // keyspace. They must not consume letter-assignment capacity.
+        let cost = if alphabet_only(code) {
+            capacity(MAX_DEPTH - code.len())
+        } else {
+            0
+        };
         self.used_slots += cost;
         self.entries_below += 1;
         self.sole_entry = (self.entries_below == 1).then_some(index);
@@ -92,11 +104,8 @@ impl Keymap {
         for (i, e) in entries.iter().enumerate() {
             if let Some(key) = &e.key {
                 let code = key.trim().to_ascii_uppercase();
-                if code.is_empty()
-                    || code.len() > MAX_DEPTH
-                    || !code.bytes().all(|c| c.is_ascii_uppercase())
-                {
-                    bail!("Invalid key for '{}': use 1-4 ASCII letters A-Z", e.label);
+                if !valid_key(&code) {
+                    bail!("Invalid key for '{}': use 1-4 printable ASCII characters (no whitespace)", e.label);
                 }
                 root.insert(&code, i)?;
                 keys[i] = code.clone();
@@ -128,20 +137,21 @@ impl Keymap {
             .unwrap_or(1);
         let min_depth = pinned
             .iter()
+            .filter(|code| alphabet_only(code))
             .map(String::len)
             .max()
             .unwrap_or(1)
             .max(remembered_depth);
         let depth = (min_depth..=MAX_DEPTH)
             .find(|&level| {
-                let used: usize = pinned.iter().map(|c| capacity(level - c.len())).sum();
+                let used: usize = pinned.iter().filter(|c| alphabet_only(c)).map(|c| capacity(level - c.len())).sum();
                 capacity(level).saturating_sub(used) >= auto.len()
             })
             .ok_or_else(|| {
                 anyhow::anyhow!("Too many entries for keys of up to {MAX_DEPTH} letters")
             })?;
 
-        let used: usize = pinned.iter().map(|c| capacity(depth - c.len())).sum();
+        let used: usize = pinned.iter().filter(|c| alphabet_only(c)).map(|c| capacity(depth - c.len())).sum();
         let mut free = capacity(depth) - used;
         // Keep existing mnemonic assignments unless they conflict with pinned
         // keys or would exhaust all available space for the remaining entries.
@@ -252,7 +262,7 @@ pub enum Lookup {
 }
 
 fn valid_key(key: &str) -> bool {
-    !key.is_empty() && key.len() <= MAX_DEPTH && key.bytes().all(|byte| byte.is_ascii_uppercase())
+    !key.is_empty() && key.len() <= MAX_DEPTH && key.bytes().all(|byte| byte.is_ascii_graphic())
 }
 
 fn capacity(exponent: usize) -> usize {
@@ -527,7 +537,44 @@ mod tests {
 
     #[test]
     fn explicit_key_validation() {
-        let items = vec![entry("Invalid", Some("1x"), 0)];
-        assert!(Keymap::build(&items).is_err());
+        for invalid in ["", "abcde", "a b", "🌎", "é"] {
+            assert!(Keymap::build(&[entry("Invalid", Some(invalid), 0)]).is_err(), "{invalid:?}");
+        }
+    }
+
+    #[test]
+    fn pinned_digits_and_shift_punctuation_have_distinct_prefix_free_keys() {
+        let items = [
+            entry("New Rust", Some("1"), 0),
+            entry("Adopt Rust", Some("!"), 0),
+            entry("Rust Port", Some("2"), 0),
+            entry("Adopt Port", Some("@"), 0),
+            entry("Tarium", Some("3"), 0),
+            entry("Adopt Tarium", Some("#"), 0),
+            entry("Fork", Some("4"), 0),
+            entry("Adopt Fork", Some("$"), 0),
+            entry("Existing alphabet", Some("D"), 0),
+            entry("Other punctuation", Some("?["), 0),
+        ];
+        let map = Keymap::build(&items).unwrap();
+        for (i, item) in items.iter().enumerate() {
+            assert_eq!(map.key(i), item.key.as_deref().unwrap().to_ascii_uppercase());
+            assert_eq!(map.lookup(map.key(i)), Lookup::Selected(i));
+        }
+        assert_eq!(map.lookup("?"), Lookup::Selected(9));
+        assert!(Keymap::build(&[entry("One", Some("1"), 0), entry("Nested", Some("1A"), 0)]).is_err());
+    }
+
+    #[test]
+    fn digit_and_symbol_pins_never_displace_existing_letter_mnemonics() {
+        let original = [entry("Greeting", None, 0), entry("Closing", None, 0)];
+        let before = Keymap::build(&original).unwrap();
+        let mut expanded = original.to_vec();
+        for (label, key) in [("New", "1"), ("Adopt", "!"), ("Other", "2"), ("Adopt other", "@")] {
+            expanded.push(entry(label, Some(key), 0));
+        }
+        let after = Keymap::build(&expanded).unwrap();
+        assert_eq!(before.key(0), after.key(0));
+        assert_eq!(before.key(1), after.key(1));
     }
 }

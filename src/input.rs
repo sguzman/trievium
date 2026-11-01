@@ -121,10 +121,7 @@ mod tests {
 
     #[test]
     fn spanish_centered_dot_is_accepted_from_text_input() {
-        let map = Keymap::build(&[
-            entry("Initialize", "3"),
-            entry("Adopt", "·"),
-        ]).unwrap();
+        let map = Keymap::build(&[entry("Initialize", "3"), entry("Adopt", "·")]).unwrap();
         assert_eq!(resolve_typed("3", &map), TypedOutcome::Selected(0));
         assert_eq!(resolve_typed("·", &map), TypedOutcome::Selected(1));
         assert_eq!(resolve_typed("🌎é·", &map), TypedOutcome::Selected(1));

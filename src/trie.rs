@@ -565,22 +565,18 @@ mod tests {
             entry("New", Some("3"), 0),
             entry("Adopt", Some("·"), 0),
             entry("Existing", Some("D"), 0),
-        ]).unwrap();
+        ])
+        .unwrap();
         assert_eq!(map.lookup("3"), Lookup::Selected(0));
         assert_eq!(map.lookup("·"), Lookup::Selected(1));
         assert_eq!(map.selection_key(1), "·");
         assert_eq!(map.selection_key(2), "D");
-        let branch = Keymap::build(&[
-            entry("A", Some("·A"), 0),
-            entry("B", Some("·B"), 0),
-        ]).unwrap();
+        let branch =
+            Keymap::build(&[entry("A", Some("·A"), 0), entry("B", Some("·B"), 0)]).unwrap();
         assert_eq!(branch.lookup("·"), Lookup::Continue);
         assert_eq!(branch.selection_key(0), "·A");
         assert_eq!(branch.selection_key(1), "·B");
-        assert!(Keymap::build(&[
-            entry("A", Some("·"), 0),
-            entry("B", Some("·A"), 0),
-        ]).is_err());
+        assert!(Keymap::build(&[entry("A", Some("·"), 0), entry("B", Some("·A"), 0),]).is_err());
     }
 
     #[test]

@@ -104,10 +104,13 @@ mod tests {
     #[test]
     fn digits_and_shifted_punctuation_resolve_as_distinct_pinned_shortcuts() {
         let map = Keymap::build(&[
-            entry("New Rust", "1"), entry("Adopt Rust", "!"),
-            entry("New Port", "2"), entry("Adopt Port", "@"),
+            entry("New Rust", "1"),
+            entry("Adopt Rust", "!"),
+            entry("New Port", "2"),
+            entry("Adopt Port", "@"),
             entry("Existing", "A"),
-        ]).unwrap();
+        ])
+        .unwrap();
         assert_eq!(resolve_typed("1", &map), TypedOutcome::Selected(0));
         assert_eq!(resolve_typed("!", &map), TypedOutcome::Selected(1));
         assert_eq!(resolve_typed("2", &map), TypedOutcome::Selected(2));

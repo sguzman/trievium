@@ -105,7 +105,10 @@ impl Keymap {
             if let Some(key) = &e.key {
                 let code = key.trim().to_ascii_uppercase();
                 if !valid_key(&code) {
-                    bail!("Invalid key for '{}': use 1-4 printable ASCII characters (no whitespace)", e.label);
+                    bail!(
+                        "Invalid key for '{}': use 1-4 printable ASCII characters (no whitespace)",
+                        e.label
+                    );
                 }
                 root.insert(&code, i)?;
                 keys[i] = code.clone();
@@ -144,14 +147,22 @@ impl Keymap {
             .max(remembered_depth);
         let depth = (min_depth..=MAX_DEPTH)
             .find(|&level| {
-                let used: usize = pinned.iter().filter(|c| alphabet_only(c)).map(|c| capacity(level - c.len())).sum();
+                let used: usize = pinned
+                    .iter()
+                    .filter(|c| alphabet_only(c))
+                    .map(|c| capacity(level - c.len()))
+                    .sum();
                 capacity(level).saturating_sub(used) >= auto.len()
             })
             .ok_or_else(|| {
                 anyhow::anyhow!("Too many entries for keys of up to {MAX_DEPTH} letters")
             })?;
 
-        let used: usize = pinned.iter().filter(|c| alphabet_only(c)).map(|c| capacity(depth - c.len())).sum();
+        let used: usize = pinned
+            .iter()
+            .filter(|c| alphabet_only(c))
+            .map(|c| capacity(depth - c.len()))
+            .sum();
         let mut free = capacity(depth) - used;
         // Keep existing mnemonic assignments unless they conflict with pinned
         // keys or would exhaust all available space for the remaining entries.
@@ -538,7 +549,10 @@ mod tests {
     #[test]
     fn explicit_key_validation() {
         for invalid in ["", "abcde", "a b", "🌎", "é"] {
-            assert!(Keymap::build(&[entry("Invalid", Some(invalid), 0)]).is_err(), "{invalid:?}");
+            assert!(
+                Keymap::build(&[entry("Invalid", Some(invalid), 0)]).is_err(),
+                "{invalid:?}"
+            );
         }
     }
 
@@ -558,11 +572,16 @@ mod tests {
         ];
         let map = Keymap::build(&items).unwrap();
         for (i, item) in items.iter().enumerate() {
-            assert_eq!(map.key(i), item.key.as_deref().unwrap().to_ascii_uppercase());
+            assert_eq!(
+                map.key(i),
+                item.key.as_deref().unwrap().to_ascii_uppercase()
+            );
             assert_eq!(map.lookup(map.key(i)), Lookup::Selected(i));
         }
         assert_eq!(map.lookup("?"), Lookup::Selected(9));
-        assert!(Keymap::build(&[entry("One", Some("1"), 0), entry("Nested", Some("1A"), 0)]).is_err());
+        assert!(
+            Keymap::build(&[entry("One", Some("1"), 0), entry("Nested", Some("1A"), 0)]).is_err()
+        );
     }
 
     #[test]
@@ -570,7 +589,12 @@ mod tests {
         let original = [entry("Greeting", None, 0), entry("Closing", None, 0)];
         let before = Keymap::build(&original).unwrap();
         let mut expanded = original.to_vec();
-        for (label, key) in [("New", "1"), ("Adopt", "!"), ("Other", "2"), ("Adopt other", "@")] {
+        for (label, key) in [
+            ("New", "1"),
+            ("Adopt", "!"),
+            ("Other", "2"),
+            ("Adopt other", "@"),
+        ] {
             expanded.push(entry(label, Some(key), 0));
         }
         let after = Keymap::build(&expanded).unwrap();

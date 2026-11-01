@@ -11,7 +11,7 @@ pub enum TypedOutcome {
 pub fn resolve_typed(buffer: &str, map: &Keymap) -> TypedOutcome {
     let mut prefix = String::new();
     for ch in buffer.chars() {
-        if !ch.is_ascii_graphic() {
+        if !ch.is_ascii_graphic() && ch != '·' {
             continue;
         }
         prefix.push(ch.to_ascii_uppercase());
@@ -117,6 +117,17 @@ mod tests {
         assert_eq!(resolve_typed("@", &map), TypedOutcome::Selected(3));
         assert_eq!(resolve_typed("a", &map), TypedOutcome::Selected(4));
         assert_eq!(resolve_typed("🌎é!", &map), TypedOutcome::Selected(1));
+    }
+
+    #[test]
+    fn spanish_centered_dot_is_accepted_from_text_input() {
+        let map = Keymap::build(&[
+            entry("Initialize", "3"),
+            entry("Adopt", "·"),
+        ]).unwrap();
+        assert_eq!(resolve_typed("3", &map), TypedOutcome::Selected(0));
+        assert_eq!(resolve_typed("·", &map), TypedOutcome::Selected(1));
+        assert_eq!(resolve_typed("🌎é·", &map), TypedOutcome::Selected(1));
     }
 
     #[test]

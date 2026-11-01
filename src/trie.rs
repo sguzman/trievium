@@ -106,7 +106,7 @@ impl Keymap {
                 let code = key.trim().to_ascii_uppercase();
                 if !valid_key(&code) {
                     bail!(
-                        "Invalid key for '{}': use 1-4 printable ASCII characters (no whitespace)",
+                        "Invalid key for '{}': use 1-4 printable ASCII characters or · (no whitespace)",
                         e.label
                     );
                 }
@@ -248,9 +248,10 @@ impl Keymap {
     /// The UI must show what users actually need to type.
     pub fn selection_key(&self, index: usize) -> &str {
         let code = self.key(index);
-        for n in 1..=code.len() {
-            if self.lookup(&code[..n]) == Lookup::Selected(index) {
-                return &code[..n];
+        for (start, ch) in code.char_indices() {
+            let end = start + ch.len_utf8();
+            if self.lookup(&code[..end]) == Lookup::Selected(index) {
+                return &code[..end];
             }
         }
         code
@@ -273,7 +274,9 @@ pub enum Lookup {
 }
 
 fn valid_key(key: &str) -> bool {
-    !key.is_empty() && key.len() <= MAX_DEPTH && key.bytes().all(|byte| byte.is_ascii_graphic())
+    !key.is_empty()
+        && key.chars().count() <= MAX_DEPTH
+        && key.chars().all(|ch| ch.is_ascii_graphic() || ch == '·')
 }
 
 fn capacity(exponent: usize) -> usize {
@@ -554,6 +557,30 @@ mod tests {
                 "{invalid:?}"
             );
         }
+    }
+
+    #[test]
+    fn centered_dot_pins_and_unicode_prefixes() {
+        let map = Keymap::build(&[
+            entry("New", Some("3"), 0),
+            entry("Adopt", Some("·"), 0),
+            entry("Existing", Some("D"), 0),
+        ]).unwrap();
+        assert_eq!(map.lookup("3"), Lookup::Selected(0));
+        assert_eq!(map.lookup("·"), Lookup::Selected(1));
+        assert_eq!(map.selection_key(1), "·");
+        assert_eq!(map.selection_key(2), "D");
+        let branch = Keymap::build(&[
+            entry("A", Some("·A"), 0),
+            entry("B", Some("·B"), 0),
+        ]).unwrap();
+        assert_eq!(branch.lookup("·"), Lookup::Continue);
+        assert_eq!(branch.selection_key(0), "·A");
+        assert_eq!(branch.selection_key(1), "·B");
+        assert!(Keymap::build(&[
+            entry("A", Some("·"), 0),
+            entry("B", Some("·A"), 0),
+        ]).is_err());
     }
 
     #[test]
